@@ -1,0 +1,3 @@
+{ "name": "lockbox-desktop", "private": true, "type": "module", "main": "main.mjs",
+  "scripts": { "start": "electron ." },
+  "dependencies": { "keytar": "^7.9.0" }, "devDependencies": { "electron": "^33.0.0" } }

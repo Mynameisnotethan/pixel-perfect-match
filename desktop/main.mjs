@@ -1,6 +1,7 @@
 // Lockbox desktop shell (Electron). OAuth runs in the native process:
 // system browser + PKCE + loopback callback; tokens live in the OS credential vault (keytar).
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, protocol, net } from 'electron';
+import { pathToFileURL } from 'node:url';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +21,10 @@ const clients = {
   google: { clientId: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID', 'googleClientId'), clientSecret: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET', 'googleInstalledAppSecret') },
   microsoft: { clientId: pick('LOCKBOX_MS_DESKTOP_CLIENT_ID', 'microsoftClientId') },
 };
-const APP_URL = pick('LOCKBOX_URL', 'appUrl') || 'http://localhost:8080';
+// The screens are bundled into the installer (renderer-dist) and served from app://lockbox.
+// LOCKBOX_DEV_URL only exists for local development against a running dev server.
+const APP_URL = process.env.LOCKBOX_DEV_URL || 'app://lockbox/index.html';
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const appOrigin = new URL(APP_URL).origin;
 
 // The mailbox index (no tokens) is stored in the vault too, under a fixed key.
@@ -85,6 +89,13 @@ on('mailbox:send', (id, msg) => withToken(id, (t, box) => mail[box.provider].sen
 on('mailbox:disconnect', async id => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
 
 app.whenReady().then(() => {
+  const root = path.join(dir, 'renderer-dist');
+  protocol.handle('app', req => {
+    const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '') || 'index.html';
+    const file = path.resolve(root, rel);
+    if (!file.startsWith(root + path.sep)) return new Response('forbidden', { status: 403 });
+    return net.fetch(pathToFileURL(fs.existsSync(file) ? file : path.join(root, 'index.html')).toString());
+  });
   const win = new BrowserWindow({ width: 1280, height: 860, webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
   // The mailbox bridge is only for the Lockbox UI: keep the window on its origin, open other links in the browser.
   win.webContents.on('will-navigate', (e, url) => { if (new URL(url).origin !== appOrigin) { e.preventDefault(); shell.openExternal(url); } });

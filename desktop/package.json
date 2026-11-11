@@ -6,11 +6,12 @@
   "type": "module",
   "main": "main.mjs",
   "scripts": {
-    "start": "LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && electron .",
+    "renderer": "cd .. && npx vite build --config desktop/vite.renderer.config.mjs",
+    "start": "LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && npm run renderer && electron .",
     "config": "node scripts/write-config.mjs",
-    "dist:win": "node scripts/write-config.mjs && electron-builder --win nsis",
-    "dist:mac": "node scripts/write-config.mjs && electron-builder --mac dmg",
-    "dist:linux": "node scripts/write-config.mjs && electron-builder --linux AppImage"
+    "dist:win": "node scripts/write-config.mjs && npm run renderer && electron-builder --win nsis",
+    "dist:mac": "node scripts/write-config.mjs && npm run renderer && electron-builder --mac dmg",
+    "dist:linux": "node scripts/write-config.mjs && npm run renderer && electron-builder --linux AppImage"
   },
   "dependencies": {
     "keytar": "^7.9.0"
@@ -28,6 +29,7 @@
     "files": [
       "main.mjs",
       "preload.cjs",
+      "renderer-dist/**",
       "release-config.json",
       "connectors/**"
     ],

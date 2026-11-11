@@ -1,4 +1,4 @@
-// Microsoft device-code sign-in (RFC 8628). Lets a Docker server connect Outlook without its own Entra app.
+// Microsoft device-code sign-in (RFC 8628), using the operator's client ID from post-deploy Setup.
 import { getProvider } from './providers.mjs';
 
 const DEVICE_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode';

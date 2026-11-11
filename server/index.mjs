@@ -24,8 +24,7 @@ async function loadKey() {
 const KEY = await loadKey();
 if (KEY.length !== 32) throw new Error('LOCKBOX_TOKEN_KEY must be 32 random bytes, base64-encoded');
 
-// Publisher's public Outlook client for device-code sign-in (no secret). Operators never need their own.
-const MS_DEVICE_CLIENT_ID = env.LOCKBOX_MS_DEVICE_CLIENT_ID || '';
+// The operator adds their public Outlook client after deployment in Setup (no secret).
 const ADMIN = env.LOCKBOX_ADMIN_USER || env.LOCKBOX_LOGIN_USER || 'owner';
 
 // ---- encrypted, restart-safe store: { [userId]: [{ id, provider, email, status, tokens }] }

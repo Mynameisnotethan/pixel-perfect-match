@@ -7,6 +7,12 @@ export function applySetup(config, body = {}) {
     if (u && !/^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(u)) throw Object.assign(new Error('public_url_must_be_https'), { status: 400 });
     next.publicUrl = u;
   }
+  if (body.microsoftDevice) {
+    const b = body.microsoftDevice;
+    const prev = next.microsoftDevice || {};
+    next.microsoftDevice = { clientId: b.clientId !== undefined ? clean(b.clientId) : prev.clientId };
+    if (b.clear) next.microsoftDevice = {};
+  }
   for (const p of ['google', 'microsoft']) {
     const b = body[p]; if (!b) continue;
     const prev = next[p] || {};
@@ -20,6 +26,8 @@ export function setupView({ config, env, publicUrl, microsoftMode, deviceAvailab
   return {
     publicUrl, publicUrlFromEnv: !!env.LOCKBOX_PUBLIC_URL,
     callbacks: publicUrl ? { google: `${publicUrl}/oauth/google/callback`, microsoft: `${publicUrl}/oauth/microsoft/callback` } : null,
-    google: side('google'), microsoft: side('microsoft'), microsoftMode, deviceAvailable,
+    google: side('google'), microsoft: side('microsoft'),
+    microsoftDevice: { clientId: env.LOCKBOX_MS_DEVICE_CLIENT_ID || config.microsoftDevice?.clientId || '', fromEnv: !!env.LOCKBOX_MS_DEVICE_CLIENT_ID },
+    microsoftMode, deviceAvailable,
   };
 }

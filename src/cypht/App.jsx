@@ -32,7 +32,7 @@ function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, onTog
   const Tag = inline ? 'span' : 'div';
   const fullyHidden = fieldFullyHidden(text, hiddenRanges);
   return <Tag className={`privacy-text selecting ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
-    {selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`}>{part.hidden ? mask(part.text) : part.text}</span>)}
+    <span className="privacy-text-content">{selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`}>{part.hidden ? mask(part.text) : part.text}</span>)}</span>
     <button type="button" className={`privacy-field-toggle ${fullyHidden ? 'is-hidden' : ''}`} title={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} aria-label={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} onMouseUp={event => event.stopPropagation()} onClick={event => { event.preventDefault(); event.stopPropagation(); onToggle(field); }}><Icon name={fullyHidden ? 'unlock-fill' : 'lock-fill'} /></button>
   </Tag>;
 }

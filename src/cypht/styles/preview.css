@@ -121,3 +121,5 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .label-row-actions { display: flex; gap: .25rem; }
 .label-row-actions .btn { padding: .15rem .4rem; line-height: 1; }
 .label-restore { align-self: start; padding: 0; }
+.label-color-picker{width:28px;height:28px;padding:0;border:1px solid var(--bs-border-color,#ccc);border-radius:50%;background:none;cursor:pointer;overflow:hidden}
+.label-color-picker::-webkit-color-swatch-wrapper{padding:0}.label-color-picker::-webkit-color-swatch{border:none;border-radius:50%}

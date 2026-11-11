@@ -4,6 +4,7 @@ import { isDuplicateLabel, labelPalette, makeLabel, removeLabel, restoreDefaultL
 function Swatches({ value, onChange, ariaLabel }) {
   return <div className="label-swatches" role="group" aria-label={ariaLabel}>
     {labelPalette.map(c => <button key={c} type="button" className={`color-swatch ${value === c ? 'is-on' : ''}`} style={{ '--label-color': c }} aria-label={`Colour ${c}`} aria-pressed={value === c} onClick={() => onChange(c)} />)}
+    <input type="color" className="label-color-picker" value={value} onChange={e => onChange(e.target.value)} aria-label={`${ariaLabel} picker`} title="Pick any colour" />
   </div>;
 }
 
@@ -11,6 +12,7 @@ export default function LabelManager({ labels, setLabels, onNotify, onAfterChang
   const [name, setName] = useState('');
   const [color, setColor] = useState(labelPalette[0]);
   const [edit, setEdit] = useState(null);
+  const [editing, setEditing] = useState(false);
 
   const apply = next => { setLabels(next); onAfterChange?.(next); };
 
@@ -44,11 +46,12 @@ export default function LabelManager({ labels, setLabels, onNotify, onAfterChang
   };
 
   return <div className="label-manager">
-    <form className="label-form" onSubmit={add}>
+    <button type="button" className={`btn btn-sm ${editing ? 'btn-primary' : 'btn-outline-secondary'} mb-2`} aria-pressed={editing} onClick={() => { setEditing(v => !v); setEdit(null); }}><i className={`bi ${editing ? 'bi-check-lg' : 'bi-pencil-square'}`} aria-hidden="true" /> {editing ? 'Done editing' : 'Edit labels'}</button>
+    {editing && <form className="label-form" onSubmit={add}>
       <input className="form-control form-control-sm" type="text" placeholder="New label name" aria-label="New label name" value={name} onChange={e => setName(e.target.value)} maxLength={40} />
       <Swatches value={color} onChange={setColor} ariaLabel="New label colour" />
       <button className="btn btn-sm btn-primary" type="submit"><i className="bi bi-plus-lg" aria-hidden="true" /> Add label</button>
-    </form>
+    </form>}
     <ul className="label-rows">
       {labels.map(l => edit?.id === l.id ? <li className="label-row is-editing" key={l.id}>
         <form className="label-edit" onSubmit={save}>
@@ -59,12 +62,12 @@ export default function LabelManager({ labels, setLabels, onNotify, onAfterChang
         </form>
       </li> : <li className="label-row" key={l.id}>
         <span className="label-chip" style={{ '--label-color': l.color }}><span className="label-dot" />{l.name}</span>
-        <span className="label-row-actions">
+        {editing && <span className="label-row-actions">
           <button type="button" className="btn btn-sm btn-outline-secondary" aria-label={`Edit label ${l.name}`} onClick={() => setEdit({ id: l.id, name: l.name, color: l.color })}><i className="bi bi-pencil" aria-hidden="true" /></button>
           <button type="button" className="btn btn-sm btn-outline-danger" aria-label={`Delete label ${l.name}`} onClick={() => remove(l)}><i className="bi bi-trash" aria-hidden="true" /></button>
-        </span>
+        </span>}
       </li>)}
     </ul>
-    <button type="button" className="btn btn-sm btn-link label-restore" onClick={() => { apply(restoreDefaultLabels()); onNotify('Default labels restored.'); }}><i className="bi bi-arrow-counterclockwise" aria-hidden="true" /> Restore default labels</button>
+    {editing && <button type="button" className="btn btn-sm btn-link label-restore" onClick={() => { apply(restoreDefaultLabels()); onNotify('Default labels restored.'); }}><i className="bi bi-arrow-counterclockwise" aria-hidden="true" /> Restore default labels</button>}
   </div>;
 }

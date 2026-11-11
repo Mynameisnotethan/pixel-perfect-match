@@ -20,6 +20,7 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 
 /* Privacy lock */
+:root { --privacy-grey: #9aa0a6; --privacy-red: #d93025; --privacy-yellow: #b26a00; --privacy-green: #1e8e3e; }
 .message-reader { position: relative; }
 .privacy-active { background: var(--bs-warning-bg-subtle, #fff3cd) !important; border-color: var(--bs-warning, #e0a800) !important; }
 .privacy-bar { position: sticky; bottom: 12px; margin: 16px auto 0; width: fit-content; max-width: calc(100% - 24px); display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #ccc); border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 20; flex-wrap: wrap; justify-content: center; }

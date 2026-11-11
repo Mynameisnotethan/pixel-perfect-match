@@ -78,12 +78,12 @@ describe("label management", () => {
   });
   it("renames and recolours without touching other labels", () => {
     const next = updateLabel(presetLabels, "financial", { name: "Banking", color: "#0891b2" });
-    expect(next.find(l => l.id === "financial")).toEqual({ id: "financial", name: "Banking", color: "#0891b2" });
-    expect(next.find(l => l.id === "personal")).toEqual(presetLabels.find(l => l.id === "personal"));
-    expect(updateLabel(next, "financial", { name: "   " }).find(l => l.id === "financial")!.name).toBe("Banking");
+    expect(next.find((l: any) => l.id === "financial")).toEqual({ id: "financial", name: "Banking", color: "#0891b2" });
+    expect(next.find((l: any) => l.id === "personal")).toEqual(presetLabels.find((l: any) => l.id === "personal"));
+    expect(updateLabel(next, "financial", { name: "   " }).find((l: any) => l.id === "financial")!.name).toBe("Banking");
   });
   it("removes one label and restores the defaults", () => {
-    expect(removeLabel(presetLabels, "financial").map(l => l.id)).not.toContain("financial");
+    expect(removeLabel(presetLabels, "financial").map((l: any) => l.id)).not.toContain("financial");
     const restored = restoreDefaultLabels();
     expect(restored).toEqual(presetLabels);
     restored[0].name = "Changed";

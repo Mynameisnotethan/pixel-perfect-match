@@ -15,12 +15,14 @@ browser / desktop app ──https──> Caddy (certificate + login) ──> web
 3. Hostinger panel → your VPS → **Docker Manager** → **Compose** → **From URL**, and paste the **raw link
    to `docker-compose.yml`**, not the GitHub page link:
    ```text
-   https://raw.githubusercontent.com/<your-username>/<your-repo>/main/docker-compose.yml
+   https://raw.githubusercontent.com/Mynameisnotethan/pixel-perfect-match/main/docker-compose.yml
    ```
    A `https://github.com/<you>/<repo>/blob/main/docker-compose.yml` link is a web page, so Hostinger
    answers **"Docker project not found"**. Open the file on GitHub and use the **Raw** button, or build the
    link above by hand. Only this one file is downloaded, which is why every service runs from a published
    image instead of being built from the repository.
+   If deploying a fork, replace `Mynameisnotethan/pixel-perfect-match` with your own owner/repository.
+   Before deploying, confirm **Actions → Docker images** has succeeded and all three packages are public (section 4).
 4. In the **Environment** section add only the three values needed to start and protect the installation:
    - `LOCKBOX_DOMAIN` = `mail.yourdomain.com`
    - `LOCKBOX_LOGIN_USER` = your login name (this user is the admin)
@@ -51,8 +53,11 @@ In GitHub → Settings → Secrets and variables → Actions, add:
 | `HOSTINGER_SSH_KEY` | a private SSH key whose public half is in the VPS `~/.ssh/authorized_keys` |
 | `HOSTINGER_APP_DIR` | optional, defaults to `~/lockbox` |
 
-Every change you make in Lovable syncs to GitHub's `main` branch, and `.github/workflows/deploy-hostinger.yml`
-pulls the new images and restarts the containers on the VPS. Mailbox connections survive updates (they live in the `lockbox-data` volume).
+Every change you make in Lovable syncs to GitHub's `main` branch. The **Docker images** workflow builds and publishes all three images first. Only after that workflow succeeds on `main` does `.github/workflows/deploy-hostinger.yml` pull the images and restart the containers on the VPS. Failed or cancelled builds do not trigger a deployment. To retry, run **Docker images** on `main`; deployment follows its successful completion.
+
+The SSH updater requires the **command-line route's Git checkout** and its configured `.env` on the VPS. **Compose from URL alone does not create that checkout**, so it does not automatically enable this updater. For a Docker Manager project, use Docker Manager to pull/redeploy its images instead. Do not start a second copy on the same ports.
+
+`HOSTINGER_APP_DIR` may be an absolute path or a `~/` path; when omitted, it resolves to the SSH user's home directory plus `/lockbox`. Mailbox connections survive updates (they live in the `lockbox-data` volume).
 
 ## 3. Windows installer from GitHub
 The installer bundles the Lockbox screens and talks to Google/Microsoft directly: it needs no server.

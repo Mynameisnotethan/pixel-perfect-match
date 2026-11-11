@@ -75,6 +75,41 @@ export const presetLabels = [
   { id: 'phone', name: 'Phone number', color: '#ea580c' },
   { id: 'other', name: 'Other', color: '#64748b' },
 ];
+
+export const labelPalette = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#64748b'];
+
+export function makeLabel(name, color = labelPalette[0], existing = []) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return null;
+  if (isDuplicateLabel(trimmed, existing)) return null;
+  const taken = new Set((existing || []).map(l => l.id));
+  let id = 'custom-' + Date.now();
+  while (taken.has(id)) id = 'custom-' + Math.random().toString(36).slice(2, 8);
+  return { id, name: trimmed, color };
+}
+
+export function isDuplicateLabel(name, labels) {
+  const needle = (name || '').trim().toLowerCase();
+  return (labels || []).some(l => l.name.trim().toLowerCase() === needle);
+}
+
+export function addLabel(labels, name, color) {
+  const created = makeLabel(name, color, labels);
+  return created ? [...labels, created] : labels;
+}
+
+export function updateLabel(labels, id, patch) {
+  return labels.map(l => {
+    if (l.id !== id) return l;
+    const name = patch.name === undefined ? l.name : l.name;
+    const trimmed = patch.name === undefined ? null : patch.name.trim();
+    return { ...l, name: trimmed || name, color: patch.color === undefined ? l.color : patch.color };
+  });
+}
+
+export function removeLabel(labels, id) { return labels.filter(l => l.id !== id); }
+
+export const restoreDefaultLabels = () => presetLabels.map(l => ({ ...l }));
 const autoNames = { 'auto-subject': 'Subject', 'auto-sender': 'Sender name', 'auto-email': 'Sender email', 'auto-body': 'Body', 'auto-attachments': 'Attachment' };
 export function labelFor(id, labels = presetLabels) {
   if (!id) return null;

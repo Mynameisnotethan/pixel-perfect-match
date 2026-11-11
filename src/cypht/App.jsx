@@ -223,7 +223,7 @@ export default function App() {
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>
     <div className="preview-banner"><span><span className="preview-dot" /> Editable preview <span className="banner-detail">· Sample accounts and messages</span></span><button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></div>
-    <header className="mobile-header"><Tool icon="list" label="Open navigation" onClick={() => setSidebar(!sidebar)} /><img src={logoDark.url} alt="Lockbox" /><span>{title}</span></header>
+    <header className="mobile-header"><Tool icon="list" label="Open navigation" onClick={() => setSidebar(!sidebar)} /><img src={settings.theme === 'darkly' ? logoLight.url : logoDark.url} alt="Lockbox" /><span>{title}</span></header>
     {sidebar && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebar(false)} />}
     <div className="cypht-layout">
       <nav className={`folder_cell ${sidebar ? 'mobile-open' : ''}`} aria-label="Main navigation"><div className="folder_list">

@@ -5,8 +5,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import keytar from 'keytar';
-import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from '../connectors/oauth.mjs';
-import { mail, upsertMailbox } from '../connectors/mail.mjs';
+import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from './connectors/oauth.mjs';
+import { mail, upsertMailbox } from './connectors/mail.mjs';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const SERVICE = 'Lockbox Mailboxes';

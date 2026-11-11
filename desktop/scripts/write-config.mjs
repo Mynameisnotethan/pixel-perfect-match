@@ -14,3 +14,5 @@ if (missing.length && process.env.LOCKBOX_ALLOW_PARTIAL !== '1') { console.error
 if (/secret/i.test(JSON.stringify(Object.keys(process.env).filter(k => k.startsWith('LOCKBOX_') && /(WEB|MS)_CLIENT_SECRET|TOKEN_KEY/.test(k))))) console.warn('Note: web-client secrets are ignored and never written to the desktop build.');
 fs.writeFileSync(new URL('../release-config.json', import.meta.url), JSON.stringify(cfg, null, 2));
 console.log('Wrote desktop/release-config.json');
+// Bundle the shared provider code inside the desktop package so the installer is self-contained.
+fs.cpSync(new URL('../../connectors', import.meta.url), new URL('../connectors', import.meta.url), { recursive: true });

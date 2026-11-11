@@ -35,3 +35,4 @@ dist-ssr
 desktop/release/
 desktop/release-config.json
 .env.lockbox
+desktop/connectors/

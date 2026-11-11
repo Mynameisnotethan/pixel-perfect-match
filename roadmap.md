@@ -47,3 +47,4 @@
 - [x] Desktop shell (loopback OAuth, OS vault) and Docker backend (HTTPS callbacks, encrypted volume store).
 - [x] Setup guide for Google Cloud, Microsoft Entra and self-hosters.
 - [ ] Live verification and wiring the UI to live connections — blocked on OAuth client registrations.
+- [ ] Build Windows installer on Windows and run live Gmail/Outlook acceptance test (needs your Google + Microsoft registrations)

@@ -56,3 +56,5 @@
 - [x] Confirm runtime has no shared Lockbox mailbox service or hardcoded provider credentials.
 - [x] Document per-owner GitHub, Hostinger, domain, provider registrations, and encrypted storage.
 - [x] Move the Outlook device client ID into post-deployment Setup; leave only domain and initial Lockbox login in Hostinger.
+- [x] Make docker-compose.yml deployable from a bare raw file URL: images only, no build contexts or relative mounts; Caddyfile baked into lockbox-proxy.
+- [ ] First Hostinger deploy: paste the raw compose URL, make the three ghcr.io packages public once, then add provider credentials in Setup.

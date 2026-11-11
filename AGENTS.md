@@ -31,3 +31,4 @@ use the editor.
 
 - Cypht preview: original imported frontend lives in src/cypht (App.jsx kept as JS), mounted client-only from src/routes/index.tsx because it reads localStorage on init.
 - Desktop app bundles the screens (desktop/vite.renderer.config.mjs → app:// scheme) and never loads a remote Lockbox URL; Docker Outlook uses device-code with a publisher public client, server settings live encrypted in /data via the Setup wizard. Why: no Lockbox-hosted service in the data path.
+- docker-compose.yml must stay deployable from a bare file URL (Hostinger Compose-from-URL downloads only that file, never the repository): every service runs from a published image, so no `build:` contexts and no relative bind mounts; the Caddy login config is baked into the proxy image (Dockerfile.proxy) instead of mounted from deploy/. Why: the panel deploy route is the one non-technical owners can follow.

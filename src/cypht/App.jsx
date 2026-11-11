@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';

@@ -36,7 +36,7 @@ Lockbox refreshes tokens automatically. When a refresh fails permanently (`inval
 3. Under **API permissions → Microsoft Graph → Delegated**, add `User.Read`, `Mail.Read`, `Mail.Send`, `offline_access`, `openid` and `email`. Tenants that block user consent need an admin to click **Grant admin consent**.
 4. Under **Authentication**:
    - Desktop: add the **Mobile and desktop applications** platform with custom redirect `http://127.0.0.1` (Entra ignores the port for loopback). Enable **Allow public client flows**. Do not create a client secret for this registration.
-   - Docker sign-in by code: **your own public desktop registration** works for every mailbox user on your deployment. Keep **Allow public client flows** on and put its ID in your environment or repo variable `LOCKBOX_MS_DEVICE_CLIENT_ID`. Independent deployers must use their own registration, not the original developer's.
+   - Docker sign-in by code: **your own public desktop registration** works for every mailbox user on your deployment. Keep **Allow public client flows** on. After deployment, paste its ID into **Add mailbox → Setup → Outlook → Outlook application (client) ID**. Independent deployers must use their own registration, not the original developer's.
    - Docker fallback for organizations that block codes: a separate registration (recommended) with the **Web** platform and redirect `https://<your-public-url>/oauth/microsoft/callback`. Under **Certificates & secrets**, create a client secret.
 
 ---

@@ -27,6 +27,7 @@ services:
       LOCKBOX_LOGIN_USER: ${LOCKBOX_LOGIN_USER:-admin}
       LOCKBOX_PUBLIC_URL: ${LOCKBOX_PUBLIC_URL:-}
       LOCKBOX_TOKEN_KEY: ${LOCKBOX_TOKEN_KEY:-}            # optional: auto-generated on the data volume
+      # Optional overrides; normally every provider credential is entered in post-deploy Setup.
       LOCKBOX_MS_DEVICE_CLIENT_ID: ${LOCKBOX_MS_DEVICE_CLIENT_ID:-}
       LOCKBOX_GOOGLE_CLIENT_ID: ${LOCKBOX_GOOGLE_CLIENT_ID:-}
       LOCKBOX_GOOGLE_CLIENT_SECRET: ${LOCKBOX_GOOGLE_CLIENT_SECRET:-}

@@ -3,9 +3,8 @@ FROM node:22-alpine
 WORKDIR /app
 COPY connectors ./connectors
 COPY server ./server
-# The publisher's public Outlook client (device-code sign-in). Not a secret.
-ARG LOCKBOX_MS_DEVICE_CLIENT_ID=
-ENV LOCKBOX_DATA_DIR=/data PORT=3000 LOCKBOX_MS_DEVICE_CLIENT_ID=$LOCKBOX_MS_DEVICE_CLIENT_ID
+# Provider credentials are added after deployment through the admin Setup page.
+ENV LOCKBOX_DATA_DIR=/data PORT=3000
 RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 3000

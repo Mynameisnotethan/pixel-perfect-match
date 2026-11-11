@@ -1,5 +1,5 @@
 # Builds the two Lockbox server images and publishes them to GitHub Packages (ghcr.io).
-# Repo variable (not secret): LOCKBOX_MS_DEVICE_CLIENT_ID = the publisher's public Outlook client ID.
+# Images contain no provider credentials; each operator adds their own in post-deploy Setup.
 name: Docker images
 on:
   push: { branches: [main], tags: ["v*"] }
@@ -30,4 +30,3 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          build-args: LOCKBOX_MS_DEVICE_CLIENT_ID=${{ vars.LOCKBOX_MS_DEVICE_CLIENT_ID }}

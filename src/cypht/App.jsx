@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
-import { aiView, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange } from './privacy.js';
+import { aiView, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
 
 const STORE = 'cypht-preview:v1:';
@@ -28,10 +28,12 @@ function useSaved(key, initial) {
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
-function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, inline = false }) {
+function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, onToggle, inline = false }) {
   const Tag = inline ? 'span' : 'div';
+  const fullyHidden = fieldFullyHidden(text, hiddenRanges);
   return <Tag className={`privacy-text selecting ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
     {selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`}>{part.hidden ? mask(part.text) : part.text}</span>)}
+    <button type="button" className={`privacy-field-toggle ${fullyHidden ? 'is-hidden' : ''}`} title={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} aria-label={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} onMouseUp={event => event.stopPropagation()} onClick={event => { event.preventDefault(); event.stopPropagation(); onToggle(field); }}><Icon name={fullyHidden ? 'unlock-fill' : 'lock-fill'} /></button>
   </Tag>;
 }
 function Dialog({ title, onClose, children, wide = false }) {

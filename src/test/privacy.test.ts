@@ -1,5 +1,5 @@
 // @ts-expect-error JS module
-import { lockStatus, mergeRanges, subtractRange, aiView, mask } from "@/cypht/privacy.js";
+import { lockStatus, mergeRanges, subtractRange, aiView, mask, togglePrivacyField, hideEntireMessage } from "@/cypht/privacy.js";
 import { describe, expect, it } from "vitest";
 const base = { id: "1", body: "hello world", attachments: [{ name: "a.txt" }], folder: "inbox" };
 describe("privacy lock", () => {
@@ -26,5 +26,18 @@ describe("privacy lock", () => {
     const message = { ...base, reviewed: true, sender: "J", email: "E", subject: "S", body: "B", hiddenRanges: [[0, 1]], hiddenSubjectRanges: [[0, 1]], hiddenSenderRanges: [[0, 1]], hiddenEmailRanges: [[0, 1]], hiddenAttachments: [0] };
     expect(lockStatus(message)).toBe("red");
     expect(lockStatus({ ...message, hiddenSubjectRanges: [] })).toBe("yellow");
+  });
+  it("field lock hides the whole field and a second tap reveals it", () => {
+    const message = { ...base, subject: "Private project" };
+    const hidden = togglePrivacyField(message, "subject");
+    expect(hidden.hiddenSubjectRanges).toEqual([[0, 15]]);
+    expect(togglePrivacyField({ ...message, ...hidden }, "subject").hiddenSubjectRanges).toEqual([]);
+  });
+  it("hide all covers every supported field and attachment", () => {
+    const message = { ...base, sender: "Jane", email: "jane@example.test", subject: "Secret" };
+    const hidden = { ...message, ...hideEntireMessage(message) };
+    expect(lockStatus(hidden)).toBe("red");
+    expect(aiView(hidden)).toMatchObject({ from: "[hidden]", email: "[hidden]", subject: "[hidden]", body: "[hidden]" });
+    expect(aiView(hidden).attachments).toEqual([{ name: "[hidden]", hidden: true }]);
   });
 });

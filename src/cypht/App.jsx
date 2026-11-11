@@ -292,7 +292,7 @@ export default function App() {
       </main>
     </div>
 
-    <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
+    <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} labels={labels} onAddLabel={l => setLabels(x => [...x, l])} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
 
     {modal?.type === 'account' && <AccountDialog account={modal.account} onClose={() => setModal(null)} onSave={account => { setAccounts(all => modal.account ? all.map(a => a.id === account.id ? account : a) : [...all, account]); setSourceIds(null); setModal(null); notify('Sample account saved. No server connection was made.'); }} />}
     {modal?.type === 'contact' && <ContactDialog contact={modal.contact} onClose={() => setModal(null)} onSave={contact => { setContacts(all => modal.contact ? all.map(c => c.id === contact.id ? contact : c) : [...all, contact]); setModal(null); notify('Contact saved in this browser.'); }} />}

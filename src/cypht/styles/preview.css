@@ -131,3 +131,9 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .privacy-text.mode-unlock .pending-sel { background: color-mix(in srgb, var(--bs-success) 28%, transparent); outline-color: var(--bs-success); text-decoration: none; }
 .privacy-text.mode-lock .pending-sel.hidden-text, .privacy-text.mode-unlock .pending-sel.hidden-text { border-bottom-style: dashed; }
 .ai-subhead{font-size:14px;font-weight:600;color:var(--preview-muted)}
+.compose-privacy { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; overflow: auto; flex: 1; min-height: 0; }
+.compose-privacy .privacy-header-row { display: flex; align-items: center; gap: 10px; }
+.compose-privacy .privacy-header-row > .privacy-field-label { width: 56px; flex: none; }
+.compose-privacy .privacy-bar { position: sticky; bottom: 0; margin: 8px auto 0; flex-wrap: wrap; justify-content: center; }
+.compose-privacy-atts { display: flex; flex-wrap: wrap; gap: 6px; }
+.compose-ai-lock.lock-yellow, .compose-ai-lock.lock-red { border-radius: 50%; }

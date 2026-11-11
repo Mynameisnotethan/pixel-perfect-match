@@ -41,3 +41,23 @@ describe("privacy lock", () => {
     expect(aiView(hidden).attachments).toEqual([{ name: "[hidden]", hidden: true }]);
   });
 });
+// @ts-expect-error JS module
+import { aiView as view2, lockStatus as status2, togglePrivacyField as toggle2 } from "@/cypht/privacy.js";
+describe("AI defaults and labels", () => {
+  const m = { id: "2", folder: "inbox", reviewed: true, sender: "Jane", email: "j@x.test", subject: "Hi", body: "pay 500 now", attachments: [{ name: "a.pdf" }] };
+  it("labelled hidden text tells the AI the label only", () => {
+    expect(view2({ ...m, hiddenRanges: [[4, 7, "financial"]] }).body).toBe("pay [hidden: Financial info] now");
+  });
+  it("default body rule hides every received body", () => {
+    expect(view2(m, { body: true }).body).toBe("[hidden: Body]");
+    expect(status2(m, { body: true })).toBe("yellow");
+  });
+  it("all defaults on makes the email red", () => {
+    expect(status2(m, { subject: true, sender: true, email: true, body: true, attachments: true })).toBe("red");
+  });
+  it("unlocking a field on one email beats the default", () => {
+    const eff = { ...m, hiddenRanges: [[0, 11, "auto-body"]] };
+    const patch = toggle2(eff, "body");
+    expect(view2({ ...m, ...patch }, { body: true }).body).toBe("pay 500 now");
+  });
+});

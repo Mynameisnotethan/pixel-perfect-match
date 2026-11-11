@@ -28,40 +28,39 @@ Fork the repository into your own GitHub account, or clone and push it to a repo
 2. Use your own domain. Create an `A` record such as `mail.example.com` pointing to your VPS.
 3. In Hostinger, open **Docker Manager → Compose → From URL** and enter your repository URL.
 
-### 3. Create your own Microsoft registration
+### 3. Deploy with only the server login settings
 
-In your own Microsoft Entra account:
-
-1. Create an app registration supporting organizational and personal Microsoft accounts.
-2. Add delegated Microsoft Graph permissions: `User.Read`, `Mail.Read`, `Mail.Send`, `offline_access`, `openid`, and `email`.
-3. Enable **Allow public client flows**. This public client ID identifies your application; it does not give anyone access to your mailbox.
-4. Copy its Application (client) ID.
-
-This registration belongs to you. Do not use the original developer's client ID.
-
-### 4. Deploy on your VPS
-
-In Hostinger's **Environment** section, enter:
+In Hostinger's **Environment** section, enter only:
 
 | Name | Value |
 |---|---|
 | `LOCKBOX_DOMAIN` | Your full hostname, such as `mail.example.com` |
 | `LOCKBOX_LOGIN_USER` | Your Lockbox administrator login |
 | `LOCKBOX_LOGIN_PASSWORD` | A new, long password for this installation |
-| `LOCKBOX_MS_DEVICE_CLIENT_ID` | Your Microsoft Application (client) ID |
 
-Click **Deploy**. Keep Hostinger's `lockbox-data` volume: it contains the automatically generated encryption key and encrypted mailbox tokens. Deleting it requires every mailbox to reconnect.
+Click **Deploy**. Keep Hostinger's `lockbox-data` volume: it contains the automatically generated encryption key, encrypted provider settings, and encrypted mailbox tokens. Deleting it requires every mailbox to reconnect.
 
-### 5. Add your own Google credentials
+### 4. Add your own Google credentials after deployment
 
-After deployment, open your Lockbox address, choose **Add mailbox**, sign in with the Lockbox administrator login, and open **Setup**.
+Open your Lockbox address, choose **Add mailbox**, sign in with the Lockbox administrator login, and open **Setup**.
 
-1. Copy the Google callback address shown by Setup.
+1. Save your public Lockbox address and copy the Google callback address shown by Setup.
 2. In your own Google Cloud project, enable the Gmail API and configure the consent screen.
 3. Create a **Web application** OAuth client and register that exact callback address.
-4. Paste your Google client ID and secret into Setup.
+4. Paste your Google client ID and secret into Setup and save.
 
 The credentials are saved in your server's encrypted settings. They are not sent to the original developer. While your Google consent screen is in Testing, add each mailbox owner as a test user; Google may expire test grants after seven days. Public use of restricted Gmail scopes requires Google's verification process.
+
+### 5. Add your own Outlook credentials after deployment
+
+Stay in **Setup → Outlook**. In your own Microsoft Entra account:
+
+1. Create an app registration supporting organizational and personal Microsoft accounts.
+2. Add delegated Microsoft Graph permissions: `User.Read`, `Mail.Read`, `Mail.Send`, `offline_access`, `openid`, and `email`.
+3. Enable **Allow public client flows**. This public client ID identifies your application; it does not give anyone access to your mailbox.
+4. Paste its Application (client) ID into **Outlook application (client) ID** in Setup and select **Save Outlook sign-in**. No client secret is needed for sign-in by code.
+
+This registration belongs to you. Do not use the original developer's client ID. If an organization blocks sign-in by code, expand **Use an Outlook web app instead** and enter a separate web app's ID and secret there.
 
 ### 6. Connect mailboxes
 

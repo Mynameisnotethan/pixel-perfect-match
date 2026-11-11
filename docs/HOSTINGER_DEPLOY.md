@@ -14,16 +14,15 @@ browser / desktop app ──https──> Caddy (certificate + login) ──> web
 2. In your DNS, add an `A` record: `mail` → the VPS IP address. Wait until it resolves.
 3. Hostinger panel → your VPS → **Docker Manager** → **Compose** → **From URL**, paste your GitHub repo link
    (private repo: make it public, or use the command-line route below).
-4. In the **Environment** section add:
+4. In the **Environment** section add only the three values needed to start and protect the installation:
    - `LOCKBOX_DOMAIN` = `mail.yourdomain.com`
    - `LOCKBOX_LOGIN_USER` = your login name (this user is the admin)
    - `LOCKBOX_LOGIN_PASSWORD` = a long password
-   - `LOCKBOX_MS_DEVICE_CLIENT_ID` = the public Outlook app ID (needed for Outlook sign-in by code)
 5. Click **Deploy**. HTTPS is issued automatically; the encryption key is created on the `lockbox-data` volume. **Never delete that volume** — everyone would need to reconnect.
-6. Open `https://mail.yourdomain.com` → Add mailbox → log in → **Setup**:
-   - **Address:** your https address. Lockbox shows the exact Google callback URL with a Copy button.
+6. Open `https://mail.yourdomain.com` → Add mailbox → log in → **Setup**. Add **all mail-provider credentials here, after deployment**:
+   - **Address:** your https address. Lockbox shows the exact provider callback URLs with Copy buttons.
    - **Gmail:** create a Google *Web application* client with that callback and paste its ID and secret.
-   - **Outlook:** nothing more to do; connect with a one-time code. If an organization blocks it, add your own Entra Web app here.
+   - **Outlook:** create your own Entra app, enable **Allow public client flows**, and paste its Application (client) ID. No secret is needed for sign-in by code. If an organization blocks codes, the optional Outlook web-app fields accept a separate ID and secret.
 7. Add mailbox → Connect Gmail / Connect Outlook → sign in with the mailbox owner's account.
 
 **Command-line route** (private repos, or for automatic updates below):
@@ -54,7 +53,7 @@ The installer is unsigned, so Windows SmartScreen will warn until you add a code
 
 ## 4. Docker images
 `.github/workflows/docker-images.yml` publishes `ghcr.io/<you>/lockbox-mail` and `lockbox-web` on every push to `main`.
-Set the repo **variable** `LOCKBOX_MS_DEVICE_CLIENT_ID` (your public Outlook client) so it is baked into the mail image.
+The images contain no provider credentials; each installation adds its own through Setup after deployment.
 Hostinger keeps building from source by default; to use the images instead, replace `build:` with `image:` in `docker-compose.yml`.
 
 ## Notes

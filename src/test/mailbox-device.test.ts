@@ -34,4 +34,17 @@ describe("server Setup wizard", () => {
     expect(JSON.stringify(v)).not.toContain('"s"');
     expect(v.callbacks.google).toBe("https://m.x/oauth/google/callback");
   });
+  it("accepts every mail provider credential after deployment with no environment variables", () => {
+    const c = applySetup({}, {
+      google: { clientId: "google-id", clientSecret: "google-secret" },
+      microsoftDevice: { clientId: "outlook-device-id" },
+      microsoft: { clientId: "outlook-web-id", clientSecret: "outlook-web-secret" },
+    });
+    const v = setupView({ config: c, env: {}, publicUrl: "https://mail.example.com", microsoftMode: "web", deviceAvailable: true });
+    expect(v.google).toEqual({ clientId: "google-id", hasSecret: true, fromEnv: false });
+    expect(v.microsoftDevice).toEqual({ clientId: "outlook-device-id", fromEnv: false });
+    expect(v.microsoft).toEqual({ clientId: "outlook-web-id", hasSecret: true, fromEnv: false });
+    expect(JSON.stringify(v)).not.toContain("google-secret");
+    expect(JSON.stringify(v)).not.toContain("outlook-web-secret");
+  });
 });

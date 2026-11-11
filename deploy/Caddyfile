@@ -1,7 +1,7 @@
 # Caddy gets the HTTPS certificate automatically and asks for a Lockbox login.
 {$LOCKBOX_DOMAIN} {
 	encode gzip
-	@mail path /oauth/* /api/mailboxes /api/mailboxes/*
+	@mail path /oauth/* /api/mailboxes /api/mailboxes/* /api/admin/*
 	handle @mail {
 		# Mailbox access needs a Lockbox login. The screens themselves hold no mail until this passes,
 		# which also lets the desktop app load them (desktop mail goes through the OS vault instead).

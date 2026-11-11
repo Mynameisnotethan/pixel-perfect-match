@@ -5,18 +5,42 @@ import { MAILBOX_PROVIDERS } from './mailbox-demo.js';
 // Self-hosted web builds (VITE_LOCKBOX_MAIL_API=1) talk to the Lockbox mail server on the same domain.
 async function api(path, init) {
   const res = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `Request failed (${res.status})`); }
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(String(body.error || `Request failed (${res.status})`).replace(/^[a-z_]+: /, '')); }
   return res.status === 204 ? null : res.json();
 }
 const webBridge = {
   runtime: 'web',
   list: () => api('/api/mailboxes'),
   // The browser goes to Google/Microsoft and comes back to Lockbox; the server stores the tokens.
-  connect: provider => { window.location.assign(`/oauth/${provider}/start`); return new Promise(() => {}); },
+  providers: () => api('/api/mailboxes/providers'),
+  getSetup: () => api('/api/admin/setup'),
+  saveSetup: body => api('/api/admin/setup', { method: 'PUT', body: JSON.stringify(body) }),
+  // Gmail (and Outlook when the admin set up a web app): the browser goes to the provider and back.
+  // Outlook otherwise uses a one-time code, so no Entra app is needed on this server.
+  connect: async (provider, ui = {}) => {
+    const mode = (await webBridge.providers())[provider];
+    if (mode === 'none') throw new Error(provider === 'google' ? 'Gmail is not set up on this server yet. An admin needs to finish Setup.' : 'Outlook sign-in is not available on this server yet.');
+    if (mode === 'web') { window.location.assign(`/oauth/${provider}/start`); return new Promise(() => {}); }
+    const d = await api('/api/mailboxes/device/start', { method: 'POST' });
+    ui.onDeviceCode?.(d);
+    try { return await waitForDevice(d, ui); } finally { ui.onDeviceCode?.(null); }
+  },
   sync: id => api(`/api/mailboxes/${encodeURIComponent(id)}/inbox`),
   send: (id, msg) => api(`/api/mailboxes/${encodeURIComponent(id)}/send`, { method: 'POST', body: JSON.stringify(msg) }),
   disconnect: id => api(`/api/mailboxes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
+async function waitForDevice(d, ui, sleep = ms => new Promise(r => setTimeout(r, ms))) {
+  let wait = d.interval * 1000;
+  while (Date.now() < d.expiresAt) {
+    await sleep(wait);
+    if (ui.cancelled?.()) throw new Error('Sign-in was cancelled.');
+    const r = await api('/api/mailboxes/device/poll', { method: 'POST', body: JSON.stringify({ handle: d.handle }) });
+    if (r.status === 'done') return r.mailbox;
+    if (r.status === 'slow_down') wait += 5000;
+  }
+  throw new Error('The code expired. Start again.');
+}
+export { waitForDevice };
 export const liveBridge = () => {
   if (typeof window === 'undefined') return null;
   if (window.lockboxMailboxes) return window.lockboxMailboxes;

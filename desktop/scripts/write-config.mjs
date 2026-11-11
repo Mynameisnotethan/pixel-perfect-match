@@ -1,9 +1,9 @@
 // Writes desktop/release-config.json from build-time environment variables.
+// No server URL: the installer bundles the screens and talks to Google/Microsoft directly.
 // Official releases run this with Lockbox's public desktop client IDs; forks run it with their own.
 // Only public-client values belong here: never put a confidential web-client secret in this file.
 import fs from 'node:fs';
 const cfg = {
-  appUrl: process.env.LOCKBOX_URL,
   googleClientId: process.env.LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID,
   // Google issues a "secret" to Desktop-type clients; it is not confidential and PKCE protects the flow.
   googleInstalledAppSecret: process.env.LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET,

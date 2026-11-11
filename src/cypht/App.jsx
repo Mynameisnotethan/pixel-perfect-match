@@ -171,10 +171,10 @@ export default function App() {
     if (result) { notify(result === 'connected' ? 'Mailbox connected. Syncing your inbox…' : 'Mailbox sign-in did not finish. Please try again.'); window.history.replaceState(null, '', window.location.pathname); }
     bridge.list().then(list => list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box))).catch(() => {});
   }, []);
-  async function connectMailbox(provider, email) {
+  async function connectMailbox(provider, email, ui) {
     const bridge = liveBridge();
     if (bridge) {
-      try { notify(`Finish signing in to ${provider === 'google' ? 'Google' : 'Microsoft'} in your browser…`); await syncLive(await bridge.connect(provider)); }
+      try { notify(`Finish signing in to ${provider === 'google' ? 'Google' : 'Microsoft'} in your browser…`); await syncLive(await bridge.connect(provider, ui)); }
       catch (e) { notify(`Connection did not finish: ${e.message}`); }
       return;
     }
@@ -352,7 +352,7 @@ export default function App() {
 
     <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} labels={labels} onAddLabel={l => setLabels(x => [...x, l])} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
 
-    {modal?.type === 'mailbox' && <Dialog title="Add mailbox" onClose={() => setModal(null)}><MailboxDialog mailboxes={mailboxes} onConnect={connectMailbox} onReconnect={b => connectMailbox(b.provider, b.email)} onExpire={b => setMailboxes(list => setStatus(list, b.id, 'reconnect'))} onDisconnect={disconnectMailbox} onManual={() => setModal({ type: 'account' })} onClose={() => setModal(null)} /></Dialog>}
+    {modal?.type === 'mailbox' && <Dialog title="Add mailbox" onClose={() => setModal(null)}><MailboxDialog mailboxes={mailboxes} onConnect={connectMailbox} onReconnect={(b, ui) => connectMailbox(b.provider, b.email, ui)} onExpire={b => setMailboxes(list => setStatus(list, b.id, 'reconnect'))} onDisconnect={disconnectMailbox} onManual={() => setModal({ type: 'account' })} onClose={() => setModal(null)} /></Dialog>}
     {modal?.type === 'account' && <AccountDialog account={modal.account} onClose={() => setModal(null)} onSave={account => { setAccounts(all => modal.account ? all.map(a => a.id === account.id ? account : a) : [...all, account]); setSourceIds(null); setModal(null); notify('Sample account saved. No server connection was made.'); }} />}
     {modal?.type === 'contact' && <ContactDialog contact={modal.contact} onClose={() => setModal(null)} onSave={contact => { setContacts(all => modal.contact ? all.map(c => c.id === contact.id ? contact : c) : [...all, contact]); setModal(null); notify('Contact saved in this browser.'); }} />}
     {modal?.type === 'event' && <EventDialog date={modal.date} onClose={() => setModal(null)} onSave={event => { setEvents(all => [...all, event]); setMonth(new Date(Number(event.date.slice(0, 4)), Number(event.date.slice(5, 7)) - 1, 1)); setModal(null); notify('Event added to the local preview calendar.'); }} />}

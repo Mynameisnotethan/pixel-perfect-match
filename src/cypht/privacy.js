@@ -1,4 +1,5 @@
 export const isReceived = m => !['sent', 'drafts', 'scheduled'].includes(m.folder);
+export const isOutgoing = m => ['sent', 'scheduled'].includes(m.folder);
 
 export function mergeRanges(ranges) {
   const sorted = (ranges || []).filter(r => r[1] > r[0]).map(r => [...r]).sort((a, b) => a[0] - b[0]);
@@ -49,7 +50,44 @@ export const privacyFields = [
   { field: 'subject', key: 'hiddenSubjectRanges' },
   { field: 'sender', key: 'hiddenSenderRanges' },
   { field: 'email', key: 'hiddenEmailRanges' },
+  { field: 'to', key: 'hiddenToRanges' },
 ];
+const receivedFields = ['subject', 'sender', 'email', 'body'];
+const outgoingFields = ['subject', 'to', 'body'];
+export function fieldsFor(m) {
+  const names = isReceived(m) ? receivedFields : outgoingFields;
+  return privacyFields.filter(f => names.includes(f.field));
+}
+
+/** Shift hidden ranges from oldText onto newText using a common prefix/suffix diff; ranges touching the edited span are trimmed to their unchanged parts. */
+export function remapRanges(oldText = '', newText = '', ranges = []) {
+  if (oldText === newText) return ranges || [];
+  let p = 0; const max = Math.min(oldText.length, newText.length);
+  while (p < max && oldText[p] === newText[p]) p++;
+  let q = 0;
+  while (q < max - p && oldText[oldText.length - 1 - q] === newText[newText.length - 1 - q]) q++;
+  const oldEnd = oldText.length - q, delta = newText.length - oldText.length;
+  const out = [];
+  for (const [a, b, ...rest] of ranges || []) {
+    if (b <= p) out.push([a, b, ...rest]);
+    else if (a >= oldEnd) out.push([a + delta, b + delta, ...rest]);
+    else {
+      if (a < p) out.push([a, p, ...rest]);
+      if (b > oldEnd) out.push([oldEnd + delta, b + delta, ...rest]);
+    }
+  }
+  return out.filter(r => r[1] > r[0]);
+}
+
+/** Re-align a draft's hidden ranges to its current texts. texts = { subject, to, body }. */
+export function syncDraftPrivacy(draft, texts) {
+  const prev = draft.privacyTexts || {};
+  const patch = { privacyTexts: texts };
+  for (const { field, key } of fieldsFor({ folder: 'drafts' })) {
+    if (draft[key]?.length) patch[key] = remapRanges(prev[field] ?? texts[field], texts[field], draft[key]);
+  }
+  return { ...draft, ...patch };
+}
 
 export function selectionSegments(text, hiddenRanges, pendingRanges) {
   return segments(text, hiddenRanges).flatMap(part => {
@@ -111,7 +149,7 @@ export function updateLabel(labels, id, patch = {}) {
 export function removeLabel(labels, id) { return labels.filter(l => l.id !== id); }
 
 export const restoreDefaultLabels = () => presetLabels.map(l => ({ ...l }));
-const autoNames = { 'auto-subject': 'Subject', 'auto-sender': 'Sender name', 'auto-email': 'Sender email', 'auto-body': 'Body', 'auto-attachments': 'Attachment' };
+const autoNames = { 'auto-subject': 'Subject', 'auto-sender': 'Sender name', 'auto-email': 'Sender email', 'auto-to': 'Recipients', 'auto-body': 'Body', 'auto-attachments': 'Attachment' };
 export function labelFor(id, labels = presetLabels) {
   if (!id) return null;
   if (autoNames[id]) return { id, name: autoNames[id], color: '#64748b' };
@@ -124,10 +162,11 @@ export function redact(text, ranges, labels) {
 }
 
 export function applyDefaults(m, defaults) {
-  if (!defaults || !isReceived(m)) return m;
+  if (!defaults || m.folder === 'drafts') return m;
+  if (!isReceived(m)) defaults = defaults.sent || {};
   const out = { ...m };
   const ov = m.overrides || {};
-  for (const { field, key } of privacyFields) {
+  for (const { field, key } of fieldsFor(m)) {
     if (defaults[field] && !ov[field] && (m[field] || '').length) out[key] = [[0, m[field].length, 'auto-' + field]];
   }
   if (defaults.attachments && !ov.attachments) {
@@ -159,17 +198,18 @@ export function hideEntireMessage(message, label) {
     reviewed: true,
     hiddenAttachments: atts,
     hiddenAttachmentLabels: label ? Object.fromEntries(atts.map(i => [i, label])) : {},
-    overrides: { subject: true, sender: true, email: true, body: true, attachments: true },
+    overrides: { subject: true, sender: true, email: true, to: true, body: true, attachments: true },
   };
-  for (const { field, key } of privacyFields) patch[key] = message[field]?.length ? whole(message[field].length, label) : [];
+  for (const { field, key } of fieldsFor(message)) patch[key] = message[field]?.length ? whole(message[field].length, label) : [];
   return patch;
 }
 
 export function lockStatus(raw, defaults) {
-  if (!raw.reviewed) return 'grey';
+  if (!raw.reviewed && isReceived(raw)) return 'grey';
   const m = applyDefaults(raw, defaults);
-  const textLen = privacyFields.reduce((length, { field }) => length + (m[field] || '').length, 0);
-  const hidText = privacyFields.reduce((length, { key }) => length + hiddenLength(m[key]), 0);
+  const fields = fieldsFor(m);
+  const textLen = fields.reduce((length, { field }) => length + (m[field] || '').length, 0);
+  const hidText = fields.reduce((length, { key }) => length + hiddenLength(m[key]), 0);
   const atts = m.attachments?.length || 0;
   const hidAtts = (m.hiddenAttachments || []).filter(i => i < atts).length;
   if (hidText === 0 && hidAtts === 0) return 'green';
@@ -181,6 +221,8 @@ export function aiView(raw, defaults, labels) {
   if (lockStatus(raw, defaults) === 'grey') return null;
   const m = applyDefaults(raw, defaults);
   const hidden = m.hiddenAttachments || [];
+  const attachments = (m.attachments || []).map((a, i) => hidden.includes(i) ? { name: tag(m.hiddenAttachmentLabels?.[i], labels), hidden: true } : { name: a.name });
+  if (!isReceived(m)) return { id: m.id, folder: m.folder, to: redact(m.to, m.hiddenToRanges, labels), subject: redact(m.subject, m.hiddenSubjectRanges, labels), date: m.date, body: redact(m.body, m.hiddenRanges, labels), attachments };
   return {
     id: m.id,
     from: redact(m.sender, m.hiddenSenderRanges, labels),

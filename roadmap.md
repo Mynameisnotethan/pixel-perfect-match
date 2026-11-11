@@ -46,6 +46,7 @@
 - [x] Shared OAuth (PKCE, refresh, reconnect), Gmail API and Graph sync/send in `connectors/`.
 - [x] Desktop shell (loopback OAuth, OS vault) and Docker backend (HTTPS callbacks, encrypted volume store).
 - [x] Setup guide for Google Cloud, Microsoft Entra and self-hosters.
-- [ ] Live verification and wiring the UI to live connections — blocked on OAuth client registrations.
+- [x] Wire web UI to live connections; Outlook sign-in by code; admin Setup wizard; standalone desktop screens; Docker image workflow.
+- [ ] Live Gmail/Outlook verification — blocked on publisher OAuth registrations and Google restricted-scope approval.
 - [ ] Build Windows installer on Windows and run live Gmail/Outlook acceptance test (needs your Google + Microsoft registrations)
 - [ ] First Hostinger deploy + GitHub secrets (needs your VPS, domain, and provider registrations)

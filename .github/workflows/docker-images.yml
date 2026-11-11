@@ -1,0 +1,33 @@
+# Builds the two Lockbox server images and publishes them to GitHub Packages (ghcr.io).
+# Repo variable (not secret): LOCKBOX_MS_DEVICE_CLIENT_ID = the publisher's public Outlook client ID.
+name: Docker images
+on:
+  push: { branches: [main], tags: ["v*"] }
+  workflow_dispatch:
+permissions: { contents: read, packages: write }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { name: lockbox-mail, file: Dockerfile }
+          - { name: lockbox-web, file: Dockerfile.web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: LOCKBOX_MS_DEVICE_CLIENT_ID=${{ vars.LOCKBOX_MS_DEVICE_CLIENT_ID }}

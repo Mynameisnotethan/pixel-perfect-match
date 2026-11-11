@@ -3,7 +3,9 @@ FROM node:22-alpine
 WORKDIR /app
 COPY connectors ./connectors
 COPY server ./server
-ENV LOCKBOX_DATA_DIR=/data PORT=3000
+# The publisher's public Outlook client (device-code sign-in). Not a secret.
+ARG LOCKBOX_MS_DEVICE_CLIENT_ID=
+ENV LOCKBOX_DATA_DIR=/data PORT=3000 LOCKBOX_MS_DEVICE_CLIENT_ID=$LOCKBOX_MS_DEVICE_CLIENT_ID
 RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 3000

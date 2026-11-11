@@ -29,10 +29,10 @@ function useSaved(key, initial) {
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
-function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, onToggle, labels, inline = false }) {
+function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, onToggle, onUnpick, mode, labels, inline = false }) {
   const Tag = inline ? 'span' : 'div';
   const fullyHidden = fieldFullyHidden(text, hiddenRanges);
-  return <Tag className={`privacy-text selecting ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
+  return <Tag className={`privacy-text selecting mode-${mode} ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
     <span className="privacy-text-content">{selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`} onClick={part.pending ? event => { event.stopPropagation(); onUnpick?.(field, part.start, part.start + part.text.length); } : undefined} style={part.hidden && labelFor(part.label, labels) ? { '--label-color': labelFor(part.label, labels).color } : undefined} title={part.hidden ? labelFor(part.label, labels)?.name || 'Hidden' : undefined}>{part.text}</span>)}</span>
     <button type="button" className={`privacy-field-toggle ${fullyHidden ? 'is-hidden' : ''}`} title={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} aria-label={fullyHidden ? `Reveal entire ${field}` : `Hide entire ${field}`} onMouseUp={event => event.stopPropagation()} onClick={event => { event.preventDefault(); event.stopPropagation(); onToggle(field); }}><Icon name={fullyHidden ? 'unlock-fill' : 'lock-fill'} /></button>
   </Tag>;
@@ -277,7 +277,7 @@ export default function App() {
   const group = (key, label) => <button className="src_name section-toggle" aria-expanded={groups[key]} onClick={() => setGroups(g => ({ ...g, [key]: !g[key] }))}>{label}<Icon name={groups[key] ? 'chevron-up' : 'chevron-down'} /></button>;
   const effActive = active ? applyDefaults(active, aiDefaults) : null;
   const pendingFor = field => mergeRanges(pendRanges.filter(range => range.field === field).map(({ start, end }) => [start, end]));
-  const privateText = (field, text, hiddenRanges, inline = false) => <PrivacyText field={field} text={text} hiddenRanges={hiddenRanges} pendingRanges={pendingFor(field)} labels={labels} onSelect={captureSelection} onToggle={togglePrivateField} inline={inline} />;
+  const privateText = (field, text, hiddenRanges, inline = false) => <PrivacyText field={field} text={text} hiddenRanges={hiddenRanges} pendingRanges={pendingFor(field)} labels={labels} onSelect={captureSelection} onToggle={togglePrivateField} mode={privacy} onUnpick={(f, a, b) => setPendRanges(rs => rs.filter(r => !(r.field === f && r.start < b && r.end > a)))} inline={inline} />;
   const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>

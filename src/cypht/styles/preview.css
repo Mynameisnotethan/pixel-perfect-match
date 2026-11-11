@@ -123,3 +123,10 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .label-restore { align-self: start; padding: 0; }
 .label-color-picker{width:28px;height:28px;padding:0;border:1px solid var(--bs-border-color,#ccc);border-radius:50%;background:none;cursor:pointer;overflow:hidden}
 .label-color-picker::-webkit-color-swatch-wrapper{padding:0}.label-color-picker::-webkit-color-swatch{border:none;border-radius:50%}
+/* Lock-mode readability: show real text with a hidden style, strong pending highlight */
+.privacy-text.selecting .hidden-text { color: inherit; font-weight: 500; letter-spacing: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--label-color, var(--bs-danger)) 22%, transparent) 0 6px, color-mix(in srgb, var(--label-color, var(--bs-danger)) 10%, transparent) 6px 12px); border-bottom: 2px solid var(--label-color, var(--bs-danger)); border-radius: 3px; padding: 1px 0; }
+.privacy-text.selecting ::selection { background: color-mix(in srgb, var(--bs-primary) 35%, transparent); color: inherit; }
+.privacy-text.mode-unlock ::selection { background: color-mix(in srgb, var(--bs-success) 35%, transparent); }
+.privacy-text.selecting .pending-sel { cursor: pointer; border-radius: 3px; padding: 1px 0; background: color-mix(in srgb, var(--bs-primary) 28%, transparent); outline: 2px solid var(--bs-primary); outline-offset: 0; }
+.privacy-text.mode-unlock .pending-sel { background: color-mix(in srgb, var(--bs-success) 28%, transparent); outline-color: var(--bs-success); text-decoration: none; }
+.privacy-text.mode-lock .pending-sel.hidden-text, .privacy-text.mode-unlock .pending-sel.hidden-text { border-bottom-style: dashed; }

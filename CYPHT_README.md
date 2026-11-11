@@ -1,6 +1,6 @@
 # Cypht — editable Lovable preview
 
-A runnable React recreation of Cypht's interface, using its original core stylesheet, default teal theme, and logos. Opens straight into a populated sample inbox so you can edit the app in a frontend preview.
+A runnable React recreation of Cypht's interface, using its original core stylesheet and default teal theme. Opens straight into a populated sample inbox so you can edit the app in a frontend preview.
 
 ## Open in Lovable
 
@@ -63,7 +63,7 @@ Original source is preserved as `reference/cypht-upstream-source.zip`, containin
 | `src/styles/preview.css` | Editable layout and integration styles |
 | `src/styles/upstream-core.css` | Original Cypht core CSS, unchanged |
 | `src/styles/upstream-theme.css` | Original default-theme CSS, with its vendor import removed |
-| `public/assets/` | Original Cypht logos |
+| `src/assets/` | Lockbox logo, served as CDN asset pointers |
 | `reference/cypht-upstream-source.zip` | Original PHP source and license |
 | `LOVABLE_PROMPT.md` | Import-and-preview instructions to paste into Lovable |
 

@@ -34,3 +34,8 @@
 - [x] Keep the bottom-bar picker in sync and clear a deleted label from the pending selection.
 - [x] Verify create, duplicate refusal, rename, use in the AI view, delete, and restore in the browser.
 - [x] Hide-from-AI lock in Compose, Sent and Scheduled emails (+ sent-email AI defaults)
+
+# Branding
+
+- [x] Replace every Cypht logo with the supplied Lockbox mark (light + dark wordmarks).
+- [x] Set the browser-tab icon from the mark's padlock and drop the default icon.

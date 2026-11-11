@@ -2,6 +2,8 @@
 
 Result: `https://mail.yourdomain.com` runs Lockbox with live Gmail/Outlook, updates on every push to GitHub, and GitHub builds the Windows installer.
 
+**Independent ownership:** every deployer uses their own GitHub copy, VPS, domain, Google/Microsoft registrations, and encrypted storage. The upstream project provides source code only; no mailbox traffic or credentials go through the original developer. Start with [the ownership and self-hosting checklist](./SELF_HOSTING.md).
+
 ```text
 browser / desktop app ──https──> Caddy (certificate + login) ──> web  (Lockbox screens)
                                                            └──> mail (Gmail/Outlook, encrypted tokens in a volume)

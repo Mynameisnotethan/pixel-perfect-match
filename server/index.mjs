@@ -43,10 +43,11 @@ const redirectFor = provider => `${publicUrl()}/oauth/${provider}/callback`;
 const webClient = provider => provider === 'google'
   ? { clientId: env.LOCKBOX_GOOGLE_CLIENT_ID || config.google?.clientId, clientSecret: env.LOCKBOX_GOOGLE_CLIENT_SECRET || config.google?.clientSecret }
   : { clientId: env.LOCKBOX_MS_CLIENT_ID || config.microsoft?.clientId, clientSecret: env.LOCKBOX_MS_CLIENT_SECRET || config.microsoft?.clientSecret };
-// Tokens remember which client issued them so refresh uses the same one.
-const clientFor = box => box.via === 'device' ? { clientId: MS_DEVICE_CLIENT_ID } : webClient(box.provider);
-const microsoftMode = () => (webClient('microsoft').clientId ? 'web' : MS_DEVICE_CLIENT_ID ? 'device' : 'none');
-const devices = new Map(); // handle -> { user, deviceCode, expiresAt }
+const deviceClientId = () => env.LOCKBOX_MS_DEVICE_CLIENT_ID || config.microsoftDevice?.clientId || '';
+// Device tokens remember which client issued them, so changing Setup does not break refresh.
+const clientFor = box => box.via === 'device' ? { clientId: box.authClientId || deviceClientId() } : webClient(box.provider);
+const microsoftMode = () => (webClient('microsoft').clientId ? 'web' : deviceClientId() ? 'device' : 'none');
+const devices = new Map(); // handle -> { user, clientId, deviceCode, expiresAt }
 
 // ---- Lockbox user: supplied by the authenticating reverse proxy in front of this container.
 function userOf(req) {
@@ -56,7 +57,7 @@ function userOf(req) {
 }
 
 const pending = new Map(); // state -> { verifier, provider, user, at }
-const publicBox = ({ tokens, ...b }) => b;
+const publicBox = ({ tokens, authClientId, ...b }) => b;
 const send = (res, status, body, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(body === undefined ? '' : JSON.stringify(body)); };
 const readJson = req => new Promise((ok, bad) => { let s = ''; req.on('data', c => { s += c; if (s.length > 1e6) req.destroy(); }); req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } }); });
 
@@ -100,7 +101,7 @@ http.createServer(async (req, res) => {
       if (user !== ADMIN) return send(res, 403, { error: 'admin_only' });
       if (req.method === 'PUT') await saveConfig(applySetup(config, await readJson(req)));
       else if (req.method !== 'GET') return send(res, 405, { error: 'method_not_allowed' });
-      return send(res, 200, setupView({ config, env, publicUrl: publicUrl(), microsoftMode: microsoftMode(), deviceAvailable: !!MS_DEVICE_CLIENT_ID }));
+      return send(res, 200, setupView({ config, env, publicUrl: publicUrl(), microsoftMode: microsoftMode(), deviceAvailable: !!deviceClientId() }));
     }
     if (url.pathname === '/api/mailboxes/providers') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
@@ -108,10 +109,11 @@ http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/mailboxes/device/start' && req.method === 'POST') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
-      if (!MS_DEVICE_CLIENT_ID) return send(res, 503, { error: 'provider_not_configured' });
-      const d = await startDeviceCode(MS_DEVICE_CLIENT_ID);
+      const clientId = deviceClientId();
+      if (!clientId) return send(res, 503, { error: 'provider_not_configured' });
+      const d = await startDeviceCode(clientId);
       const handle = randomBytes(18).toString('base64url');
-      devices.set(handle, { user, deviceCode: d.deviceCode, expiresAt: d.expiresAt });
+      devices.set(handle, { user, clientId, deviceCode: d.deviceCode, expiresAt: d.expiresAt });
       return send(res, 200, { handle, userCode: d.userCode, verificationUri: d.verificationUri, expiresAt: d.expiresAt, interval: d.interval });
     }
     if (url.pathname === '/api/mailboxes/device/poll' && req.method === 'POST') {
@@ -120,11 +122,11 @@ http.createServer(async (req, res) => {
       if (!user || !d || d.user !== user) return send(res, 404, { error: 'not_found' });
       if (Date.now() > d.expiresAt) { devices.delete(handle); return send(res, 410, { error: 'expired: The code expired. Start again.' }); }
       let r;
-      try { r = await pollDeviceCode(MS_DEVICE_CLIENT_ID, d.deviceCode); } catch (e) { devices.delete(handle); return send(res, 400, { error: e.message }); }
+      try { r = await pollDeviceCode(d.clientId, d.deviceCode); } catch (e) { devices.delete(handle); return send(res, 400, { error: e.message }); }
       if (r.status !== 'done') return send(res, 200, { status: r.status });
       devices.delete(handle);
       const { email } = await mail.microsoft.profile(r.tokens.accessToken);
-      const box = await mutate(db => { db[user] = upsertMailbox(db[user] || [], { id: `microsoft:${email.toLowerCase()}`, provider: 'microsoft', email, status: 'connected', via: 'device', tokens: r.tokens }); return db[user].find(b => b.id === `microsoft:${email.toLowerCase()}`); });
+      const box = await mutate(db => { db[user] = upsertMailbox(db[user] || [], { id: `microsoft:${email.toLowerCase()}`, provider: 'microsoft', email, status: 'connected', via: 'device', authClientId: d.clientId, tokens: r.tokens }); return db[user].find(b => b.id === `microsoft:${email.toLowerCase()}`); });
       return send(res, 200, { status: 'done', mailbox: publicBox(box) });
     }
     if (!url.pathname.startsWith('/api/mailboxes')) return send(res, 404, { error: 'not_found' });

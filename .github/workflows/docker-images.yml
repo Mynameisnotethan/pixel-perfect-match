@@ -30,4 +30,3 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          build-args: LOCKBOX_MS_DEVICE_CLIENT_ID=${{ vars.LOCKBOX_MS_DEVICE_CLIENT_ID }}

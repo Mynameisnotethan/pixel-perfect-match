@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { MAILBOX_PROVIDERS, STATUS_TEXT } from './mailbox-demo.js';
+import { liveBridge } from './mailbox-live.js';
 
 const Icon = ({ name }) => <i aria-hidden="true" className={`bi bi-${name}`} />;
 
 export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDisconnect, onExpire, onManual, onClose }) {
   const [provider, setProvider] = useState(null);
   const [email, setEmail] = useState('');
-  const start = p => { setProvider(p); setEmail(p === 'google' ? 'you@gmail.com' : 'you@outlook.com'); };
+  const live = !!liveBridge();
+  const start = p => { if (live) { onConnect(p); return; } setProvider(p); setEmail(p === 'google' ? 'you@gmail.com' : 'you@outlook.com'); };
   const submit = e => { e.preventDefault(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return; onConnect(provider, email.trim()); setProvider(null); };
   return <div className="mailbox-connect">
-    <div className="mailbox-demo-badge"><Icon name="info-circle" /> Demo mode — no Google or Microsoft sign-in happens in this preview. Live connections run in the desktop and Docker versions.</div>
+    {!live && <div className="mailbox-demo-badge"><Icon name="info-circle" /> <span><strong>Demo mode.</strong> No Google or Microsoft sign-in happens in this preview. To connect real mailboxes, use the desktop app (built with Lockbox's Google and Microsoft app registrations) or a Docker install with its own registrations.</span></div>}
     {!provider ? <div className="mailbox-providers">
       {Object.entries(MAILBOX_PROVIDERS).map(([id, p]) => <button key={id} type="button" className="mailbox-provider" onClick={() => start(id)}>
         <span className={`mailbox-provider-icon is-${id}`}><Icon name={p.icon} /></span>

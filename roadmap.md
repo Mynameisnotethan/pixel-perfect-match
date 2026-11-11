@@ -19,5 +19,5 @@
 
 # Lock-mode layout
 
-- [ ] Replace overlapping dashed outlines with organized, labelled privacy fields and grouped controls.
-- [ ] Verify selection, quick hide/reveal, and the narrow-screen layout.
+- [x] Replace overlapping dashed outlines with organized, labelled privacy fields and grouped controls.
+- [x] Verify selection, quick hide/reveal, and the narrow-screen layout.

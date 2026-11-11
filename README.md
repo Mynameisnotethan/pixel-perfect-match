@@ -1,24 +1,31 @@
-# Pixel Perfect Match
+# Lockbox
 
-Implement exactly the screenshot and nothing else
+Self-hosted email with per-message controls for hiding selected information from AI access. Lockbox includes a browser app, an optional Windows desktop app, and Docker services for connecting Gmail and Outlook directly to an installation controlled by its owner.
 
-This project was built with [Lovable](https://lovable.dev).
+## Own your deployment
 
-## Build with Lovable
+Every independent installation uses its own GitHub copy, server, domain, Google/Microsoft app registrations, and encrypted mailbox storage. The upstream repository supplies source code only; there is no shared Lockbox mailbox service.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/11c7fbd2-31b6-41ec-9d97-08d2c5f87e13).
+Start with **[Run your own Lockbox](docs/SELF_HOSTING.md)** for the per-owner Hostinger checklist and ownership boundaries.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+## Documentation
 
-## Development
+- [Self-hosting and ownership](docs/SELF_HOSTING.md)
+- [Hostinger deployment and GitHub automation](docs/HOSTINGER_DEPLOY.md)
+- [Google and Microsoft mailbox setup](docs/MAILBOX_SETUP.md)
+- [Original Cypht preview notes](CYPHT_README.md)
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Local development
+
+Requires Node.js and npm.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+npm install
 npm run dev
 ```
+
+The Lovable preview uses simulated mailbox connections. Live web mailbox connections run through the self-hosted Docker deployment; desktop connections use the desktop app's local system credential store.
+
+## Verification status
+
+The application builds and its automated tests cover the mailbox helpers, but real Google/Microsoft sign-in, a production Hostinger deployment, and the Windows installer still require testing with the owner's accounts and registrations.

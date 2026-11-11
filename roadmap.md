@@ -50,3 +50,8 @@
 - [ ] Live Gmail/Outlook verification — blocked on publisher OAuth registrations and Google restricted-scope approval.
 - [ ] Build Windows installer on Windows and run live Gmail/Outlook acceptance test (needs your Google + Microsoft registrations)
 - [ ] First Hostinger deploy + GitHub secrets (needs your VPS, domain, and provider registrations)
+
+# Independent ownership
+
+- [x] Confirm runtime has no shared Lockbox mailbox service or hardcoded provider credentials.
+- [x] Document per-owner GitHub, Hostinger, domain, provider registrations, and encrypted storage.

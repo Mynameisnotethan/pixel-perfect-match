@@ -21,9 +21,8 @@ export function addRanges(existing, added) {
 
 export function subtractRange(ranges, [s, e]) {
   const out = [];
-  for (const [a, b] of ranges || []) {
-    if (b <= s || a >= e) { out.push([a, b]); continue; }
-    const rest = arguments[0].find(r => r[0] === a && r[1] === b)?.slice(2) || [];
+  for (const [a, b, ...rest] of ranges || []) {
+    if (b <= s || a >= e) { out.push([a, b, ...rest]); continue; }
     if (a < s) out.push([a, s, ...rest]);
     if (b > e) out.push([e, b, ...rest]);
   }

@@ -91,6 +91,7 @@ describe("label management", () => {
   });
 });
 
+// @ts-expect-error JS module
 import { remapRanges as _remap, lockStatus as _ls, aiView as _av, applyDefaults as _ad } from '../cypht/privacy.js';
 describe('outgoing email privacy', () => {
   const sent = { id: 's1', folder: 'sent', subject: 'Hi', to: 'a@x.test', sender: 'Me', email: 'me@x.test', body: 'Card 1234', attachments: [] };

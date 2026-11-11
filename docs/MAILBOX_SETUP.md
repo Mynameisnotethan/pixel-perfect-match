@@ -36,25 +36,25 @@ Lockbox refreshes tokens automatically. When a refresh fails permanently (`inval
 3. Under **API permissions → Microsoft Graph → Delegated**, add `User.Read`, `Mail.Read`, `Mail.Send`, `offline_access`, `openid` and `email`. Tenants that block user consent need an admin to click **Grant admin consent**.
 4. Under **Authentication**:
    - Desktop: add the **Mobile and desktop applications** platform with custom redirect `http://127.0.0.1` (Entra ignores the port for loopback). Enable **Allow public client flows**. Do not create a client secret for this registration.
-   - Docker: use a separate registration (recommended) with the **Web** platform and redirect `https://<your-public-url>/oauth/microsoft/callback`. Under **Certificates & secrets**, create a client secret.
+   - Docker sign-in by code (shipped to every Docker user): the **same public desktop registration** works. Keep **Allow public client flows** on and put its ID in the repo variable `LOCKBOX_MS_DEVICE_CLIENT_ID`.
+   - Docker fallback for organizations that block codes: a separate registration (recommended) with the **Web** platform and redirect `https://<your-public-url>/oauth/microsoft/callback`. Under **Certificates & secrets**, create a client secret.
 
 ---
 
 ## 3. Desktop app
 
-Development run (uses environment variables, loads the UI from `LOCKBOX_URL`):
+Development run (builds the bundled screens, then opens them; set `LOCKBOX_DEV_URL=http://localhost:8080` to use a dev server instead):
 
 ```bash
 cd desktop && npm install
 LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID=... LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET=... \
-LOCKBOX_MS_DESKTOP_CLIENT_ID=... LOCKBOX_URL=http://localhost:8080 npm start
+LOCKBOX_MS_DESKTOP_CLIENT_ID=... npm start
 ```
 
-Official release / fork release. The four values below are baked into `release-config.json` inside the installer, so end users never enter anything. Only public desktop-client values go in; web-client secrets and `LOCKBOX_TOKEN_KEY` are never read.
+Official release / fork release. The three values below are baked into `release-config.json` inside the installer, so end users never enter anything. Only public desktop-client values go in; web-client secrets and `LOCKBOX_TOKEN_KEY` are never read.
 
 ```bash
 cd desktop && npm install
-export LOCKBOX_URL=https://<published Lockbox web URL>
 export LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID=...  LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET=...
 export LOCKBOX_MS_DESKTOP_CLIENT_ID=...
 npm run dist:win     # Windows NSIS installer -> desktop/release/Lockbox Setup 0.1.0.exe
@@ -107,3 +107,10 @@ None of the steps below have been run against real accounts yet:
 - Revoke access in the Google or Microsoft account settings and confirm **Reconnect required** appears.
 - The UI uses live mode automatically inside the desktop app (`window.lockboxMailboxes`). Self-hosted web builds (`VITE_LOCKBOX_MAIL_API=1`, set in `Dockerfile.web`) use `/api/mailboxes`. See `docs/HOSTINGER_DEPLOY.md`.
 - The Windows installer (`npm run dist:win`) has not been built here; only a Linux unpacked build was verified.
+
+
+## Gmail restricted-scope verification (publisher)
+`gmail.readonly` is restricted. Before the public desktop client works for anyone outside your test users, submit the
+Google Auth Platform app for verification: privacy policy URL, homepage on a verified domain, a demo video of the
+connect flow, and the annual third-party security assessment (CASA). Until then, the installer only works for listed test users.
+Docker operators use their own Google client, so they are unaffected by this.

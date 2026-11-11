@@ -36,3 +36,4 @@ desktop/release/
 desktop/release-config.json
 .env.lockbox
 desktop/connectors/
+desktop/renderer-dist

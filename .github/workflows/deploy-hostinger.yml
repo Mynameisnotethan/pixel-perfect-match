@@ -1,24 +1,42 @@
-# Every push to main updates the Hostinger VPS.
-# Repo secrets: HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY  (optional: HOSTINGER_APP_DIR)
+# Deploy only after all three Docker images have been published successfully.
+# Repo secrets: HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY (optional: HOSTINGER_APP_DIR)
 name: Deploy to Hostinger
 on:
-  push: { branches: [main] }
-  workflow_dispatch:
-concurrency: deploy-hostinger
+  workflow_run:
+    workflows: ["Docker images"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: deploy-hostinger
+  cancel-in-progress: false
 jobs:
   deploy:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1.2.0
+        env:
+          LOCKBOX_DEPLOY_DIR: ${{ secrets.HOSTINGER_APP_DIR }}
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USER }}
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          envs: LOCKBOX_DEPLOY_DIR
           script: |
-            set -e
-            cd "${{ secrets.HOSTINGER_APP_DIR || '~/lockbox' }}"
+            set -eu
+            # Expand the default and an explicitly configured ~/ path on the VPS.
+            app_dir="${LOCKBOX_DEPLOY_DIR:-$HOME/lockbox}"
+            case "$app_dir" in
+              "~") app_dir="$HOME" ;;
+              "~/"*) app_dir="$HOME/${app_dir#\~/}" ;;
+            esac
+            cd "$app_dir"
+            # This route requires a Git checkout, unlike Compose from URL.
             git pull --ff-only
-            # The compose file runs published images, so an update is a pull + restart.
+            docker compose config --quiet
             docker compose pull
             docker compose up -d
-            docker image prune -f

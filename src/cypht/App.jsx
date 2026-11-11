@@ -44,6 +44,9 @@ function downloadText(name, text, type = 'text/plain') { const url = URL.createO
 const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', bodyHtml: '', attachments: [] }, account);
 const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
+import MailboxDialog from './MailboxDialog.jsx';
+import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId } from './mailbox-demo.js';
+
 export default function App() {
   const [accounts, setAccounts] = useSaved('accounts', initialAccounts);
   const [messages, setMessages, messagesStorageError] = useSaved('messages', seedMessages);
@@ -51,6 +54,7 @@ export default function App() {
   const [settings, setSettings] = useSaved('settings', initialSettings);
   const [events, setEvents] = useSaved('events', []);
   const [view, setView] = useState('everything');
+  const [mailboxes, setMailboxes] = useSaved('mailboxes', []);
   const [aiKey, setAiKey] = useSaved('ai-key', '');
   const [aiDefaults, setAiDefaults] = useSaved('ai-defaults', {});
   const [labels, setLabels] = useSaved('privacy-labels', presetLabels);
@@ -147,6 +151,24 @@ export default function App() {
     setCurrent(message.id); pv.setMode(null); updateMessages([message.id], isReceived(message) ? { read: true, reviewed: true } : { read: true });
   };
   const toggleSelected = id => setSelected(all => all.includes(id) ? all.filter(v => v !== id) : [...all, id]);
+  function connectMailbox(provider, email) {
+    const id = mailboxId(provider, email);
+    setMailboxes(list => upsertMailbox(list, { provider, email, status: 'connecting' }));
+    setTimeout(() => setMailboxes(list => setStatus(list, id, 'syncing')), 900);
+    setTimeout(() => {
+      const box = { id, provider, email };
+      setMailboxes(list => setStatus(list, id, 'connected'));
+      setAccounts(all => all.some(a => a.id === id) ? all.map(a => a.id === id ? accountFromMailbox(box) : a) : [...all, accountFromMailbox(box)]);
+      setMessages(all => all.some(m => m.id === `welcome-${id}`) ? all : [{ id: `welcome-${id}`, sender: 'Lockbox', email: 'demo@lockbox.example.test', subject: `Demo: ${email} is connected`, body: `This is a demo message. In the desktop or Docker version, your real ${provider === 'google' ? 'Gmail' : 'Outlook'} inbox syncs here and you can send from ${email}.`, account: id, folder: 'inbox', read: false, flagged: false, date: new Date().toISOString(), attachments: [] }, ...all]);
+      setSourceIds(null);
+    }, 2200);
+  }
+  function disconnectMailbox(box) {
+    setMailboxes(list => removeMailbox(list, box.id));
+    setAccounts(all => all.filter(a => a.id !== box.id));
+    setMessages(all => all.filter(m => m.account !== box.id));
+    setSourceIds(null); notify(`${box.email} disconnected.`);
+  }
   function compose(kind = 'new', message = null, contact = null) {
     const account = message?.account || accounts[0]?.id || '';
     let d = emptyDraft(account);
@@ -250,7 +272,7 @@ export default function App() {
             <div className="account-row"><button className="account-expander" title={`Show folders for ${a.name}`} aria-label={`Show folders for ${a.name}`} aria-expanded={!!expandedAccounts[a.id]} onClick={() => setExpandedAccounts(all => ({ ...all, [a.id]: !all[a.id] }))}><Icon name={expandedAccounts[a.id] ? 'caret-down-fill' : 'caret-right-fill'} /></button><button className="nav-item-button" onClick={() => go(`account:${a.id}`)} title={a.email}><span className="account-dot" style={{ background: a.color }} /><span className="nav-label account-email">{a.email}</span></button></div>
             {expandedAccounts[a.id] && <ul className="inner_list">{['inbox', 'sent', 'drafts', 'archive', 'trash'].map(folder => <li key={folder}><button className={`nav-item-button ${view === `account:${a.id}:${folder}` ? 'sub-active' : ''}`} onClick={() => go(`account:${a.id}:${folder}`)}><Icon name={folder === 'inbox' ? 'inbox' : 'folder'} className="menu-icon" />{folder.replace(/^./, c => c.toUpperCase())}</button></li>)}</ul>}
           </li>)}
-          <li><button className="nav-item-button add-account-link" onClick={() => setModal({ type: 'account' })}><Icon name="plus-circle" className="menu-icon" /><span className="nav-label">Add account</span></button></li>
+          <li><button className="nav-item-button add-account-link" onClick={() => setModal({ type: 'mailbox' })}><Icon name="plus-circle" className="menu-icon" /><span className="nav-label">Add account</span></button></li>
         </ul>}
         {group('feeds', 'Feed')}{groups.feeds && <ul className="folders">{nav('feeds', 'News feeds', 'rss')}</ul>}
         {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Site', 'gear-wide-connected')}{nav('ai', 'AI Access', 'robot')}{nav('save', 'Save', 'download')}</ul>}
@@ -296,6 +318,7 @@ export default function App() {
 
     <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} labels={labels} onAddLabel={l => setLabels(x => [...x, l])} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
 
+    {modal?.type === 'mailbox' && <Dialog title="Add mailbox" onClose={() => setModal(null)}><MailboxDialog mailboxes={mailboxes} onConnect={connectMailbox} onReconnect={b => connectMailbox(b.provider, b.email)} onExpire={b => setMailboxes(list => setStatus(list, b.id, 'reconnect'))} onDisconnect={disconnectMailbox} onManual={() => setModal({ type: 'account' })} onClose={() => setModal(null)} /></Dialog>}
     {modal?.type === 'account' && <AccountDialog account={modal.account} onClose={() => setModal(null)} onSave={account => { setAccounts(all => modal.account ? all.map(a => a.id === account.id ? account : a) : [...all, account]); setSourceIds(null); setModal(null); notify('Sample account saved. No server connection was made.'); }} />}
     {modal?.type === 'contact' && <ContactDialog contact={modal.contact} onClose={() => setModal(null)} onSave={contact => { setContacts(all => modal.contact ? all.map(c => c.id === contact.id ? contact : c) : [...all, contact]); setModal(null); notify('Contact saved in this browser.'); }} />}
     {modal?.type === 'event' && <EventDialog date={modal.date} onClose={() => setModal(null)} onSave={event => { setEvents(all => [...all, event]); setMonth(new Date(Number(event.date.slice(0, 4)), Number(event.date.slice(5, 7)) - 1, 1)); setModal(null); notify('Event added to the local preview calendar.'); }} />}

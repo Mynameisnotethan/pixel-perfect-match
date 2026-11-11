@@ -30,3 +30,4 @@ use the editor.
 <!-- LOVABLE:END -->
 
 - Cypht preview: original imported frontend lives in src/cypht (App.jsx kept as JS), mounted client-only from src/routes/index.tsx because it reads localStorage on init.
+- Desktop app bundles the screens (desktop/vite.renderer.config.mjs → app:// scheme) and never loads a remote Lockbox URL; Docker Outlook uses device-code with a publisher public client, server settings live encrypted in /data via the Setup wizard. Why: no Lockbox-hosted service in the data path.

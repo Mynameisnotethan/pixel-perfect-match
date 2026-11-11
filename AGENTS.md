@@ -28,3 +28,5 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+- Cypht preview: original imported frontend lives in src/cypht (App.jsx kept as JS), mounted client-only from src/routes/index.tsx because it reads localStorage on init.

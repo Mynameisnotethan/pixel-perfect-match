@@ -1,0 +1,28 @@
+export const initialAccounts = [
+  { id:'personal', name:'Personal', email:'my-email@example.test', color:'#24bd67', host:'imap.example.test', port:'993', type:'IMAP' },
+  { id:'work', name:'Work', email:'work@example.test', color:'#a349e9', host:'imap.work.example.test', port:'993', type:'IMAP' },
+  { id:'outlook', name:'Outlook', email:'outlook@example.test', color:'#0060d9', host:'outlook.example.test', port:'993', type:'IMAP' },
+];
+const templates = [
+ ['Design Weekly','newsletter@design.example.test','Top 10 UI Trends for 2026','Here is your weekly roundup of design ideas, useful resources, and thoughtful interfaces.\n\nThis week we are exploring typography, colour, and small details that make everyday software easier to use.\n\nHave a great week!\nThe Design Weekly team'],
+ ['Project Team','team@project.example.test','Meeting notes: Q4 Roadmap Discussion','Hi everyone,\n\nThanks for a productive conversation. Here are the next steps from our roadmap discussion:\n\n1. Finalize the updated interface.\n2. Review the account settings.\n3. Schedule a follow-up to gather feedback.\n\nPlease reply with anything we missed.\n\nBest,\nThe Project Team'],
+ ['Sarah Chen','sarah@studio.example.test','Re: Interface feedback','Hi,\n\nI took another look at the latest screens. The simpler navigation is working well. Could we try a more compact message list and compare it with the current layout?\n\nHappy to talk through it tomorrow.\n\nSarah'],
+ ['Bank Security','security@bank.example.test','Your monthly statement is ready','Your latest account statement is available.\n\nThis is sample content for the editable Cypht preview. It does not contain real financial information.\n\nThe security team'],
+ ['Human Resources','hr@company.example.test','Open enrollment for benefits starts soon','Hello,\n\nOur annual benefits enrollment window opens next week. Please review the attached information before selecting your coverage.\n\nIf you have questions, reply to this message.\n\nHuman Resources'],
+ ['Product Updates','updates@product.example.test','Cycle 42 summary','Your weekly project summary is ready.\n\nCompleted: navigation updates and account settings.\nIn progress: message view and keyboard shortcuts.\n\nThanks for keeping everything moving!'],
+ ['Alex Morgan','alex@team.example.test','A few ideas for next week','Hi,\n\nI have added a few ideas for next week. Let me know which ones you would like to explore first.\n\nThanks,\nAlex'],
+ ['Cypht Community','community@cypht.example.test','Welcome to Cypht','Welcome!\n\nCypht brings your email accounts together in one place. This editable preview uses sample messages so you can explore layouts and make changes without connecting a real mailbox.\n\nTry opening a message, composing a draft, changing themes, or adjusting the settings.\n\nThe Cypht community'],
+ ['Calendar','calendar@example.test','Invitation: Project check-in','You are invited to a project check-in.\n\nTime: 10:00 AM\nLocation: Video call\n\nAgenda: review progress and agree on next steps.'],
+ ['Support Team','support@example.test','Re: Your account settings','Hello,\n\nThanks for reaching out. You can update your preferences from Settings → Site in the left sidebar.\n\nBest,\nSupport'],
+ ['Design Weekly','newsletter@design.example.test','Small details, better interfaces','In this edition: meaningful empty states, readable messages, and accessible controls.\n\nThanks for reading.\nDesign Weekly'],
+ ['Jordan Lee','jordan@example.test','Updated documents for your review','Hi,\n\nI have attached the revised documents. Please take a look when you have a moment and send back any comments.\n\nBest,\nJordan'],
+ ['Notifications','notifications@example.test','Your weekly activity report','Here is a summary of your activity for the week.\n\nThis sample email helps demonstrate the unified inbox across several accounts.\n\nHave a good weekend!'],
+];
+export function seedMessages() {
+  const list = templates.map((t,i)=>({id:`sample-${i}`,sender:t[0],email:t[1],subject:t[2],body:t[3],account:initialAccounts[i%3].id,folder:'inbox',read:i%3===0,flagged:i===2||i===10,date:new Date(Date.now()-i*1000*60*60*9).toISOString(),attachments:i===4?[{name:'Benefits-guide.txt',content:'Sample attachment for the Cypht editable preview. No real benefits information is included.'}]:i===11?[{name:'Review-notes.txt',content:'Sample review document. Replace this content when connecting a real backend.'}]:[]}));
+  list.push({id:'draft-initial',sender:'Me',email:initialAccounts[0].email,to:'sarah@studio.example.test',subject:'Interface review',body:'Hi Sarah,\n\nHere are my notes so far.\n\n',account:'personal',folder:'drafts',read:true,flagged:false,date:new Date().toISOString(),attachments:[]});
+  list.push({id:'sent-initial',sender:'Me',email:initialAccounts[1].email,to:'team@project.example.test',subject:'Thanks for the update',body:'Thanks everyone,\n\nThese notes are helpful. I will take a look this afternoon.\n\nBest',account:'work',folder:'sent',read:true,flagged:false,date:new Date(Date.now()-86400000).toISOString(),attachments:[]});
+  return list;
+}
+export const initialContacts = [{id:'contact-1',name:'Sarah Chen',email:'sarah@studio.example.test',company:'Studio',phone:''},{id:'contact-2',name:'Alex Morgan',email:'alex@team.example.test',company:'Project Team',phone:''},{id:'contact-3',name:'Jordan Lee',email:'jordan@example.test',company:'Design',phone:''}];
+export const initialSettings = {theme:'default',compact:false,readingPane:false,pageSize:20,language:'English',timezone:'America/Toronto',showIcons:true,confirmDelete:true,blockImages:true};

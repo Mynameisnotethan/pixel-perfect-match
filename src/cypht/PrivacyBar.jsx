@@ -30,7 +30,7 @@ export default function PrivacyBar({ mode, setMode, onConfirm, onClose, onHideAl
     </div>}
     <button className="btn btn-sm btn-outline-secondary privacy-hide-all" aria-label="Hide all" onClick={onHideAll}><i className="bi bi-lock-fill" aria-hidden="true" /> Hide all</button>
     <div className="privacy-bar-actions">
-      <button className="btn btn-sm btn-primary" disabled={!pending} onClick={onConfirm}>Confirm</button>
+      <button className="btn btn-sm btn-primary" disabled={!pending} onClick={onConfirm}>{pending ? (mode === 'lock' ? `Hide ${pending}` : `Reveal ${pending}`) : 'Confirm'}</button>
       <button className="btn btn-sm btn-outline-secondary" onClick={onClose}>Done</button>
     </div>
   </div>;

@@ -18,3 +18,21 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 @media(max-width:900px){.composer-stack{right:12px;max-width:calc(100vw - 24px);gap:6px}.gmail-composer{width:min(580px,calc(100vw - 24px));flex-basis:min(580px,calc(100vw - 24px))}.gmail-composer.is-minimized{width:240px;flex-basis:240px}.gmail-composer:not(.is-expanded)~.gmail-composer:not(.is-expanded){display:none}}
 @media(max-width:600px){.composer-stack{inset:auto 0 0;max-width:100vw;width:100vw}.gmail-composer,.gmail-composer.is-expanded{position:relative;inset:auto;transform:none;width:100vw;height:calc(100dvh - 40px);max-height:none;flex-basis:100vw;border-radius:10px 10px 0 0;border-left:0;border-right:0}.gmail-composer.is-minimized{width:100vw;height:42px;flex-basis:100vw}.composer-title{max-width:55vw}.formatting-toolbar{border-radius:10px}.composer-actions{padding-bottom:8px}.composer-dialog-body{padding:16px}.schedule-choice{display:block}.schedule-choice span{display:block;margin-top:3px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Privacy lock */
+.message-reader { position: relative; }
+.privacy-active { background: var(--bs-warning-bg-subtle, #fff3cd) !important; border-color: var(--bs-warning, #e0a800) !important; }
+.privacy-bar { position: sticky; bottom: 12px; margin: 16px auto 0; width: fit-content; max-width: calc(100% - 24px); display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #ccc); border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 20; flex-wrap: wrap; justify-content: center; }
+.privacy-mode { border: 1px solid var(--bs-border-color, #ccc); background: transparent; border-radius: 50%; width: 34px; height: 34px; }
+.privacy-mode.is-on { background: var(--bs-primary, #0d6efd); color: var(--bs-white, #fff); border-color: transparent; }
+.privacy-hint { font-size: .8rem; opacity: .75; }
+.privacy-text { white-space: pre-wrap; }
+.privacy-text.selecting { cursor: text; outline: 2px dashed var(--bs-warning, #e0a800); outline-offset: 6px; border-radius: 4px; }
+.hidden-text { color: var(--bs-secondary-color, #888); letter-spacing: .02em; }
+.pending-sel { background: var(--bs-warning-bg-subtle, #fff3cd); }
+.attachments button.att-hidden { background: repeating-linear-gradient(45deg, rgba(128,128,128,.12) 0 6px, rgba(128,128,128,.25) 6px 12px); color: var(--bs-secondary-color, #888); }
+.attachments button.att-picked { outline: 2px solid var(--bs-warning, #e0a800); }
+.lock-status { margin-right: 6px; font-size: .85rem; }
+.lock-grey { color: #9aa0a6; } .lock-red { color: #d93025; } .lock-yellow { color: #e0a800; } .lock-green { color: #1e8e3e; }
+.ai-key { font-family: monospace; padding: 8px 10px; border: 1px solid var(--bs-border-color, #ccc); border-radius: 6px; word-break: break-all; }
+.ai-preview pre { white-space: pre-wrap; font-size: .8rem; max-height: 420px; overflow: auto; padding: 10px; border: 1px solid var(--bs-border-color, #ccc); border-radius: 6px; }

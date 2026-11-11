@@ -61,6 +61,29 @@ export function redact(text, ranges) {
   return segments(text || '', ranges).map(part => part.hidden ? '[hidden]' : part.text).join('');
 }
 
+export function fieldFullyHidden(text, ranges) {
+  return Boolean((text || '').length) && hiddenLength(ranges) >= (text || '').length;
+}
+
+export function togglePrivacyField(message, field) {
+  const config = privacyFields.find(item => item.field === field);
+  if (!config) return {};
+  const text = message[field] || '';
+  return {
+    reviewed: true,
+    [config.key]: fieldFullyHidden(text, message[config.key]) || !text.length ? [] : [[0, text.length]],
+  };
+}
+
+export function hideEntireMessage(message) {
+  const patch = {
+    reviewed: true,
+    hiddenAttachments: (message.attachments || []).map((_, index) => index),
+  };
+  for (const { field, key } of privacyFields) patch[key] = message[field]?.length ? [[0, message[field].length]] : [];
+  return patch;
+}
+
 export function lockStatus(m) {
   if (!m.reviewed) return 'grey';
   const textLen = privacyFields.reduce((length, { field }) => length + (m[field] || '').length, 0);

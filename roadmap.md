@@ -10,3 +10,9 @@
 - [x] Keep the original email readable outside lock mode and show its privacy colour in the reader toolbar.
 - [x] Allow partial hiding of the subject, sender name, and sender email, including AI-view redaction and status calculation.
 - [x] Verify body and header hiding, unlocking, persistence, and normal reading in the browser; run privacy tests.
+
+# Quick privacy controls
+
+- [x] Add a one-tap hide/reveal lock to each selectable subject, sender, email, and body field.
+- [x] Add Hide all to the privacy bar while retaining range selection and attachment controls.
+- [x] Remove the privacy-bar hint and privacy confirmation notifications; verify quick controls and existing selection flows.

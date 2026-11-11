@@ -31,6 +31,12 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .privacy-inline { display: inline; white-space: normal; }
 .privacy-text.selecting { cursor: text; outline: 2px dashed var(--bs-warning, #e0a800); outline-offset: 6px; border-radius: 4px; }
 .privacy-inline.selecting { outline-offset: 3px; }
+.privacy-text { position: relative; }
+.privacy-text:not(.privacy-inline) { padding-right: 34px; }
+.privacy-field-toggle { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; padding: 0; border: 1px solid var(--bs-border-color); border-radius: 50%; background: var(--bs-body-bg); color: var(--preview-muted); font-size: 11px; }
+.privacy-field-toggle.is-hidden { color: var(--privacy-yellow); border-color: currentColor; }
+.privacy-inline .privacy-field-toggle { position: static; width: 21px; height: 21px; margin-left: 5px; vertical-align: middle; }
+.privacy-hide-all { display: inline-flex; align-items: center; gap: 5px; }
 .hidden-text { color: var(--bs-secondary-color, #888); letter-spacing: .02em; }
 .pending-sel { background: var(--bs-warning-bg-subtle, #fff3cd); }
 .attachments button.att-hidden { background: repeating-linear-gradient(45deg, rgba(128,128,128,.12) 0 6px, rgba(128,128,128,.25) 6px 12px); color: var(--bs-secondary-color, #888); }

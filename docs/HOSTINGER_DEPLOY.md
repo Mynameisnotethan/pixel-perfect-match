@@ -74,6 +74,9 @@ empty to run the upstream images, or set it to your own GitHub username so the c
 from your repository. `LOCKBOX_IMAGE_TAG` pins a tag instead of `latest`.
 
 ## Notes
-- The Lockbox login protects mailbox access; each login name gets its own mailboxes. To add people, add more `name hash` lines inside `basic_auth` in `deploy/Caddyfile` (hash with `docker run --rm caddy:2-alpine caddy hash-password`).
+- The Lockbox login protects mailbox access; each login name gets its own mailboxes. To add people, add more
+  `name hash` lines inside `basic_auth` in `deploy/Caddyfile`, push the change (GitHub rebuilds
+  `lockbox-proxy`), then `docker compose pull && docker compose up -d` on the VPS. Hash a password with
+  `docker run --rm caddy:2-alpine caddy hash-password --plaintext 'the password'`.
 - Desktop users connect mail on their own PC (tokens in Windows Credential Manager); the server never sees them.
 - Logs: `docker compose logs -f mail`.

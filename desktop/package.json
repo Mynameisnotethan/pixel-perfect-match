@@ -1,3 +1,45 @@
-{ "name": "lockbox-desktop", "private": true, "type": "module", "main": "main.mjs",
-  "scripts": { "start": "electron ." },
-  "dependencies": { "keytar": "^7.9.0" }, "devDependencies": { "electron": "^33.0.0" } }
+{
+  "name": "lockbox-desktop",
+  "productName": "Lockbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && electron .",
+    "config": "node scripts/write-config.mjs",
+    "dist:win": "node scripts/write-config.mjs && electron-builder --win nsis",
+    "dist:mac": "node scripts/write-config.mjs && electron-builder --mac dmg",
+    "dist:linux": "node scripts/write-config.mjs && electron-builder --linux AppImage"
+  },
+  "dependencies": {
+    "keytar": "^7.9.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.lockbox.desktop",
+    "productName": "Lockbox",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.mjs",
+      "preload.cjs",
+      "release-config.json",
+      "connectors/**"
+    ],
+    "extraMetadata": {
+      "main": "main.mjs"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

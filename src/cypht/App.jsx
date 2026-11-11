@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
 import LabelManager from './LabelManager.jsx';
 import { usePrivacyEditor } from './PrivacyEditor.jsx';
 import { addRanges, aiView, applyDefaults, labelFor, presetLabels, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
-import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
+import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml, htmlToText } from './compose-utils.js';
 import logoDark from '../assets/lockbox-logo-dark.png.asset.json';
 import logoLight from '../assets/lockbox-logo-light.png.asset.json';
 
@@ -45,6 +45,7 @@ const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', b
 const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 import MailboxDialog from './MailboxDialog.jsx';
+import { liveBridge, inboxToMessages, liveAccount } from './mailbox-live.js';
 import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId } from './mailbox-demo.js';
 
 export default function App() {
@@ -151,7 +152,30 @@ export default function App() {
     setCurrent(message.id); pv.setMode(null); updateMessages([message.id], isReceived(message) ? { read: true, reviewed: true } : { read: true });
   };
   const toggleSelected = id => setSelected(all => all.includes(id) ? all.filter(v => v !== id) : [...all, id]);
-  function connectMailbox(provider, email) {
+  async function syncLive(box) {
+    const bridge = liveBridge();
+    setMailboxes(list => upsertMailbox(list, { ...box, status: 'syncing' }));
+    try {
+      const incoming = inboxToMessages(box, await bridge.sync(box.id));
+      setAccounts(all => [...all.filter(a => a.id !== box.id), liveAccount(box)]);
+      setMessages(all => { const known = new Set(all.map(m => m.id)); return [...incoming.filter(m => !known.has(m.id)), ...all]; });
+      setMailboxes(list => upsertMailbox(list, { ...box, status: 'connected' })); setSourceIds(null);
+    } catch (e) {
+      setMailboxes(list => upsertMailbox(list, { ...box, status: e.message?.includes('reconnect_required') ? 'reconnect' : 'connected' }));
+      notify(`Could not sync ${box.email}: ${e.message}`);
+    }
+  }
+  useEffect(() => {
+    const bridge = liveBridge(); if (!bridge) return;
+    bridge.list().then(list => list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box))).catch(() => {});
+  }, []);
+  async function connectMailbox(provider, email) {
+    const bridge = liveBridge();
+    if (bridge) {
+      try { notify(`Finish signing in to ${provider === 'google' ? 'Google' : 'Microsoft'} in your browser…`); await syncLive(await bridge.connect(provider)); }
+      catch (e) { notify(`Connection did not finish: ${e.message}`); }
+      return;
+    }
     const id = mailboxId(provider, email);
     setMailboxes(list => upsertMailbox(list, { provider, email, status: 'connecting' }));
     setTimeout(() => setMailboxes(list => setStatus(list, id, 'syncing')), 900);
@@ -164,6 +188,7 @@ export default function App() {
     }, 2200);
   }
   function disconnectMailbox(box) {
+    liveBridge()?.disconnect(box.id).catch(() => {});
     setMailboxes(list => removeMailbox(list, box.id));
     setAccounts(all => all.filter(a => a.id !== box.id));
     setMessages(all => all.filter(m => m.account !== box.id));
@@ -205,6 +230,13 @@ export default function App() {
     const id = draft.id;
     if (pendingSends.some(item => item.message.id === id) || messages.some(item => item.id === id && ['sent', 'scheduled'].includes(item.folder))) throw new Error('This message is already queued. Duplicate sending was prevented.');
     const account = accountFor(draft.account);
+    if (account?.live && !scheduledAt) {
+      const sent = draftMessage(draft, account, 'sent');
+      await liveBridge().send(account.id, { to: sent.to, subject: draft.subject || '', body: htmlToText(sent.bodyHtml || '') });
+      setMessages(all => [{ ...sent, date: new Date().toISOString() }, ...all.filter(item => item.id !== id)]);
+      setDrafts(all => all.filter(item => item.id !== id)); notify(`Sent from ${account.email}.`);
+      return;
+    }
     if (scheduledAt) {
       const scheduled = { ...draftMessage(draft, account, 'scheduled'), scheduledAt };
       setMessages(all => [scheduled, ...all.filter(item => item.id !== id)]);

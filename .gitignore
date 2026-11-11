@@ -30,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Desktop build output and baked release config
+desktop/release/
+desktop/release-config.json
+.env.lockbox
+desktop/connectors/

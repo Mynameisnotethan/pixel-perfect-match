@@ -10,6 +10,7 @@ import App from "./App.jsx";
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
+  override componentDidCatch(error: unknown) { console.error("Lockbox preview crashed:", String((error as Error)?.stack ?? error)); }
   override render() {
     if (this.state.failed) return <div style={{ padding: 40, fontFamily: "system-ui" }}><h1>Preview could not open</h1><p>Saved preview data may be incompatible with this version.</p><button onClick={() => { Object.keys(localStorage).filter(k => k.startsWith("cypht-preview:")).forEach(k => localStorage.removeItem(k)); location.reload(); }}>Reset preview data</button></div>;
     return this.props.children;

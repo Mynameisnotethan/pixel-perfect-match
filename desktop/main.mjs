@@ -22,20 +22,23 @@ const writeIndex = list => keytar.setPassword(SERVICE, 'index', JSON.stringify(l
 const tokensFor = async id => JSON.parse((await keytar.getPassword(SERVICE, `tokens:${id}`)) || 'null');
 const saveTokens = (id, t) => keytar.setPassword(SERVICE, `tokens:${id}`, JSON.stringify(t));
 
-function loopbackCode(expectedState) {
-  return new Promise((resolve, reject) => {
+/** Starts a one-shot loopback listener on a random port and resolves with the validated code. */
+function startLoopback(expectedState) {
+  return new Promise((ready, fail) => {
+    let finish;
+    const code = new Promise((resolve, reject) => { finish = { resolve, reject }; });
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://127.0.0.1');
       if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
-      const ok = stateMatches(expectedState, url.searchParams.get('state')) && url.searchParams.get('code');
+      const value = url.searchParams.get('code');
+      const ok = stateMatches(expectedState, url.searchParams.get('state')) && value;
       res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html' }).end(ok ? '<p>Lockbox is connected. You can close this tab.</p>' : '<p>Sign-in could not be verified. Return to Lockbox and try again.</p>');
       server.close(); clearTimeout(timer);
-      ok ? resolve(url.searchParams.get('code')) : reject(new Error(url.searchParams.get('error') || 'state_mismatch'));
+      ok ? finish.resolve(value) : finish.reject(new Error(url.searchParams.get('error') || 'state_mismatch'));
     });
-    const timer = setTimeout(() => { server.close(); reject(new Error('timeout')); }, 5 * 60_000);
-    server.listen(0, '127.0.0.1', () => resolve.port = server.address().port);
-    server.on('listening', () => server.emit('ready', server.address().port));
-    loopbackCode.server = server;
+    const timer = setTimeout(() => { server.close(); finish.reject(new Error('timeout')); }, 5 * 60_000);
+    server.on('error', fail);
+    server.listen(0, '127.0.0.1', () => ready({ redirectUri: `http://127.0.0.1:${server.address().port}/callback`, code }));
   });
 }
 
@@ -43,16 +46,13 @@ async function connect(providerId) {
   const client = clients[providerId];
   if (!client?.clientId) throw new Error(`No desktop OAuth client configured for ${providerId}`);
   const { verifier, challenge, state } = await createPkce();
-  const codePromise = loopbackCode(state);
-  const server = loopbackCode.server;
-  await new Promise(r => server.listening ? r() : server.once('listening', r));
-  const redirectUri = `http://127.0.0.1:${server.address().port}/callback`;
+  const { redirectUri, code: codePromise } = await startLoopback(state);
   await shell.openExternal(buildAuthUrl(providerId, { clientId: client.clientId, redirectUri, challenge, state }));
   const code = await codePromise;
   const tokens = await exchangeCode(providerId, { code, verifier, redirectUri, ...client });
   const { email } = await mail[providerId].profile(tokens.accessToken);
   const list = upsertMailbox(await readIndex(), { id: `${providerId}:${email.toLowerCase()}`, provider: providerId, email, status: 'connected' });
-  const box = list.find(b => b.email === email && b.provider === providerId);
+  const box = list.find(b => b.provider === providerId && b.email.toLowerCase() === email.toLowerCase());
   await saveTokens(box.id, tokens); await writeIndex(list);
   return box;
 }

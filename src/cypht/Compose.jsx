@@ -11,6 +11,12 @@ import {
   MAX_ATTACHMENT_BYTES, addRecipient, cleanHtml, duplicateRecipients, formatBytes,
   htmlToText, isSafeLink, normalizeEmail, parseRecipients, recipient, textToHtml, validEmail,
 } from './compose-utils.js';
+import { lockStatus, syncDraftPrivacy, fieldsFor, labelFor, mask } from './privacy.js';
+import { usePrivacyEditor } from './PrivacyEditor.jsx';
+import PrivacyBar from './PrivacyBar.jsx';
+
+const draftTexts = d => ({ subject: d.subject || '', to: (d.recipients?.to || []).map(item => item.email).join(', '), body: htmlToText(d.bodyHtml || '') });
+const rangeKeys = d => Object.fromEntries(fieldsFor({ folder: 'drafts' }).map(({ key }) => [key, d[key]]).filter(([, v]) => v));
 
 const EMOJIS = [
   ['😀', 'grinning smile happy'], ['😃', 'smiley happy'], ['😄', 'smile happy'], ['😂', 'joy laugh tears'], ['🙂', 'slight smile'], ['😉', 'wink'], ['😊', 'blush smile'], ['😍', 'heart eyes love'], ['🤩', 'star struck excited'], ['😘', 'kiss love'], ['😎', 'cool sunglasses'], ['🤔', 'thinking'], ['🤗', 'hug'], ['👍', 'thumbs up yes'], ['👎', 'thumbs down no'], ['👏', 'clap applause'], ['🙌', 'celebrate raised hands'], ['🙏', 'please thanks pray'], ['💪', 'strong muscle'], ['🎉', 'party celebration'], ['✨', 'sparkles'], ['🔥', 'fire hot'], ['❤️', 'red heart love'], ['💙', 'blue heart'], ['💚', 'green heart'], ['✅', 'check done yes'], ['⭐', 'star favorite'], ['📌', 'pin'], ['📎', 'paperclip attachment'], ['📅', 'calendar date'], ['📞', 'phone call'], ['✉️', 'email envelope'], ['💡', 'idea light'], ['🚀', 'rocket launch'], ['🌈', 'rainbow'], ['☀️', 'sun sunny'], ['🌙', 'moon night'], ['☕', 'coffee'], ['🍕', 'pizza'], ['🎂', 'birthday cake'],
@@ -87,7 +93,7 @@ function RecipientField({ field, label, items, contacts, value, onInput, onChang
   </div>;
 }
 
-export default function Compose({ draft, accounts, contacts, settings, onSettings, onChange, onClose, onDiscard, onSend, onPopout, index }) {
+export default function Compose({ draft, labels = [], onAddLabel, accounts, contacts, settings, onSettings, onChange, onClose, onDiscard, onSend, onPopout, index }) {
   const draftRef = useRef(draft);
   const changeRef = useRef(onChange);
   const [inputs, setInputs] = useState({ to: draft.recipientInputs?.to || '', cc: draft.recipientInputs?.cc || '', bcc: draft.recipientInputs?.bcc || '' });
@@ -98,6 +104,11 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
   const [sendError, setSendError] = useState('');
   const [sending, setSending] = useState(false);
   const [linkForm, setLinkForm] = useState({ text: '', url: '' });
+  const [hideLabel, setHideLabel] = useState('');
+  const texts = draftTexts(draft);
+  const privTarget = { ...syncDraftPrivacy(draft, texts), folder: 'drafts' };
+  const pv = usePrivacyEditor({ message: privTarget, label: hideLabel, labels, onPatch: patch => update({ ...rangeKeys(privTarget), privacyTexts: draftTexts(draftRef.current), ...patch }) });
+  const privStatus = lockStatus({ ...privTarget, folder: 'sent' }, {});
   const [imageForm, setImageForm] = useState({ alt: '', width: '' });
   const [linkSelection, setLinkSelection] = useState(null);
   const [scheduleDate, setScheduleDate] = useState(localInputDate(suggestedTimes()[0].date));
@@ -207,6 +218,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     if (sendingRef.current) return;
     sendingRef.current = true; setSending(true); setDialog(null); setSendError('');
     await new Promise(resolve => setTimeout(resolve, 450));
+    next = syncDraftPrivacy(next, draftTexts(next));
     try { await onSend(next, scheduledAt); }
     catch (error) { setSendError(error.message || 'The demo send failed. Your draft is still here.'); sendingRef.current = false; setSending(false); }
   }
@@ -302,9 +314,17 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
       <RecipientField field="to" label="To" items={draft.recipients.to} contacts={contacts} value={inputs.to} onInput={value => setInput('to', value)} onChange={items => update({ recipients: { ...draftRef.current.recipients, to: items } })} autoFocus={!draft.body} />
       {recipientFields && <RecipientField field="cc" label="Cc" items={draft.recipients.cc} contacts={contacts} value={inputs.cc} onInput={value => setInput('cc', value)} onChange={items => update({ recipients: { ...draftRef.current.recipients, cc: items } })} />}
       {(recipientFields && (draft.showBcc || draft.recipients.bcc.length > 0)) && <RecipientField field="bcc" label="Bcc" items={draft.recipients.bcc} contacts={contacts} value={inputs.bcc} onInput={value => setInput('bcc', value)} onChange={items => update({ recipients: { ...draftRef.current.recipients, bcc: items } })} />}
+      {pv.mode ? <div className="compose-privacy">
+        <div className="privacy-header-row"><span className="privacy-field-label">To</span>{texts.to ? pv.text('to', texts.to, pv.eff.hiddenToRanges, true, 'recipients') : <em className="muted-copy">No recipients yet</em>}</div>
+        <div className="privacy-header-row"><span className="privacy-field-label">Subject</span>{texts.subject ? pv.text('subject', texts.subject, pv.eff.hiddenSubjectRanges, true) : <em className="muted-copy">No subject yet</em>}</div>
+        <span className="privacy-field-label">Message</span>{texts.body.trim() ? pv.text('body', texts.body, pv.eff.hiddenRanges) : <em className="muted-copy">No message yet</em>}
+        {draft.attachments.length > 0 && <div className="attachments compose-privacy-atts">{draft.attachments.map((a, i) => { const hid = (pv.eff.hiddenAttachments || []).includes(i); const l = labelFor(pv.eff.hiddenAttachmentLabels?.[i], labels); return <button type="button" key={a.id || i} style={hid && l ? { '--label-color': l.color } : undefined} className={`${hid ? 'att-hidden' : ''} ${pv.pendAtts.includes(i) ? 'att-picked' : ''}`} onClick={() => pv.pickAttachment(i)}><Icon name={hid ? 'lock-fill' : 'file-earmark-text'} /><span>{hid ? mask(a.name) : a.name}</span></button>; })}</div>}
+        <PrivacyBar labels={labels} label={hideLabel} setLabel={setHideLabel} onAddLabel={l => { onAddLabel?.(l); setHideLabel(l.id); }} mode={pv.mode} setMode={pv.setMode} pending={pv.pending} onClose={pv.close} onConfirm={pv.confirm} onHideAll={pv.hideAll} />
+      </div> : <>
       <div className="subject-row"><label className="visually-hidden" htmlFor={`subject-${draft.id}`}>Subject</label><input id={`subject-${draft.id}`} value={draft.subject} maxLength={998} placeholder="Subject" onChange={event => update({ subject: event.target.value })} /></div>
       <div className={`editor-scroll ${draft.plainText ? 'plain-text-mode' : ''}`}><EditorContent editor={editor} /></div>
-      {draft.attachments.length > 0 && <div className="composer-attachment-list" aria-label="Attachments">{draft.attachments.map(item => <div className={`composer-attachment ${item.status}`} key={item.id}><Icon name={item.type?.startsWith('image/') ? 'file-earmark-image' : 'file-earmark'} /><span><strong>{item.name}</strong><small>{formatBytes(item.size)} · {item.status === 'ready' ? 'Ready' : item.status === 'uploading' ? `Uploading ${item.progress || 0}%` : item.error || 'Re-add this file'}</small>{item.status === 'uploading' && <progress max="100" value={item.progress || 0} aria-label={`Upload progress for ${item.name}`} />}</span>{item.status === 'error' && <ComposeTool icon="arrow-clockwise" label={`Retry ${item.name}`} onClick={() => retryAttachment(item)} />}<ComposeTool icon="x" label={`Remove ${item.name}`} onClick={() => update({ attachments: draftRef.current.attachments.filter(file => file.id !== item.id) })} /></div>)}</div>}
+            </>}
+      {!pv.mode && draft.attachments.length > 0 && <div className="composer-attachment-list" aria-label="Attachments">{draft.attachments.map(item => <div className={`composer-attachment ${item.status}`} key={item.id}><Icon name={item.type?.startsWith('image/') ? 'file-earmark-image' : 'file-earmark'} /><span><strong>{item.name}</strong><small>{formatBytes(item.size)} · {item.status === 'ready' ? 'Ready' : item.status === 'uploading' ? `Uploading ${item.progress || 0}%` : item.error || 'Re-add this file'}</small>{item.status === 'uploading' && <progress max="100" value={item.progress || 0} aria-label={`Upload progress for ${item.name}`} />}</span>{item.status === 'error' && <ComposeTool icon="arrow-clockwise" label={`Retry ${item.name}`} onClick={() => retryAttachment(item)} />}<ComposeTool icon="x" label={`Remove ${item.name}`} onClick={() => update({ attachments: draftRef.current.attachments.filter(file => file.id !== item.id) })} /></div>)}</div>}
       {draft.formatting && <div className="formatting-toolbar" role="toolbar" aria-label="Formatting options">
         <ComposeTool icon="arrow-counterclockwise" label="Undo" disabled={!editor?.can().undo()} onClick={() => editor?.chain().focus().undo().run()} /><ComposeTool icon="arrow-clockwise" label="Redo" disabled={!editor?.can().redo()} onClick={() => editor?.chain().focus().redo().run()} />
         <select aria-label="Font family" title="Font family" value={editor?.getAttributes('textStyle').fontFamily || FONTS[0].value} onChange={event => editor?.chain().focus().setFontFamily(event.target.value).run()}>{FONTS.map(font => <option value={font.value} key={font.label}>{font.label}</option>)}</select>
@@ -324,7 +344,8 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
         <div className="composer-menu-wrap"><ComposeTool icon="emoji-smile" label="Insert emoji" active={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? '' : 'emoji')} />{menu === 'emoji' && <div className="composer-dropdown emoji-picker"><input autoFocus aria-label="Search emoji" placeholder="Search emoji" value={emojiSearch} onChange={event => setEmojiSearch(event.target.value)} /><div>{emojiList.map(emoji => <button key={emoji.char} title={emoji.name} aria-label={`Insert ${emoji.char}`} onClick={() => { editor?.chain().focus().insertContent(emoji.char).run(); setMenu(''); }}>{emoji.char}</button>)}</div></div>}</div>
         <ComposeTool icon="google" label="Insert files using Google Drive" onClick={() => setDialog({ type: 'drive' })} />
         <ComposeTool icon="image" label="Insert photo" onClick={() => photoRef.current?.click()} />
-        <ComposeTool icon="lock" label="Confidential mode" onClick={() => setDialog({ type: 'confidential' })} />
+        <ComposeTool icon={privStatus === 'green' ? 'unlock' : 'lock-fill'} label={pv.mode ? 'Back to editing' : 'Hide from AI'} active={!!pv.mode} className={`compose-ai-lock ${privStatus !== 'green' ? 'lock-' + privStatus : ''}`} onClick={() => pv.setMode(pv.mode ? null : 'lock')} />
+        <ComposeTool icon="shield-lock" label="Confidential mode" onClick={() => setDialog({ type: 'confidential' })} />
         <ComposeTool icon="pen" label="Insert signature" onClick={() => setDialog({ type: 'signature' })} />
         <div className="composer-menu-wrap"><ComposeTool icon="three-dots-vertical" label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? '' : 'more')} />{menu === 'more' && <div className="composer-dropdown more-dropdown"><button onClick={() => { if (draft.plainText) { update({ plainText: false }); setMenu(''); } else setDialog({ type: 'plain-text' }); }}><Icon name="file-text" /> {draft.plainText ? 'Rich text mode' : 'Plain text mode'}</button><button onClick={printDraft}><Icon name="printer" /> Print</button><button onClick={() => { setDialog({ type: 'templates' }); setMenu(''); }}><Icon name="layout-text-window" /> Templates</button><button onClick={() => { onSettings({ ...settings, defaultExpanded: !settings.defaultExpanded }); setMenu(''); }}><Icon name="arrows-fullscreen" /> {settings.defaultExpanded ? '✓ ' : ''}Default to expanded</button><button onClick={() => { onSettings({ ...settings, failNextSend: !settings.failNextSend }); setMenu(''); }}><Icon name="exclamation-triangle" /> {settings.failNextSend ? '✓ ' : ''}Fail next demo send</button><label className="undo-setting">Undo Send<select value={settings.undoSeconds} onChange={event => onSettings({ ...settings, undoSeconds: Number(event.target.value) })}>{[5, 10, 20, 30].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label></div>}</div>
         <ComposeTool icon="trash" label="Discard draft" className="discard-button" onClick={() => setDialog({ type: 'discard' })} />

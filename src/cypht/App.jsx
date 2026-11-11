@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
+import Compose from './Compose.jsx';
+import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
 
 const STORE = 'cypht-preview:v1:';
 function useSaved(key, initial) {
@@ -8,6 +10,14 @@ function useSaved(key, initial) {
     catch { return typeof initial === 'function' ? initial() : initial; }
   });
   useEffect(() => { try { localStorage.setItem(STORE + key, JSON.stringify(value)); } catch { /* Preview also works without browser storage. */ } }, [key, value]);
+  useEffect(() => {
+    const sync = event => {
+      if (event.key !== STORE + key || !event.newValue) return;
+      try { setValue(JSON.parse(event.newValue)); } catch { /* Ignore incomplete data from another window. */ }
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, [key]);
   return [value, setValue];
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
@@ -21,8 +31,8 @@ function Dialog({ title, onClose, children, wide = false }) {
 }
 function formatDate(value) { return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value)); }
 function downloadText(name, text, type = 'text/plain') { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-const emptyDraft = account => ({ account, to: '', cc: '', bcc: '', subject: '', body: '', attachments: [] });
-const titles = { everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
+const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', bodyHtml: '', attachments: [] }, account);
+const titles = { everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 export default function App() {
   const [accounts, setAccounts] = useSaved('accounts', initialAccounts);
@@ -37,7 +47,11 @@ export default function App() {
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null);
-  const [draft, setDraft] = useState(null);
+  const [drafts, setDrafts] = useSaved('open-drafts', []);
+  const [pendingSends, setPendingSends] = useSaved('pending-sends', []);
+  const [composeSettings, setComposeSettings] = useSaved('compose-settings', { undoSeconds: 5, defaultExpanded: false, confirmKeyboardSend: true, signatures: [], templates: [] });
+  const [undoSend, setUndoSend] = useState(null);
+  const [discarded, setDiscarded] = useState(null);
   const [toast, setToast] = useState('');
   const [sidebar, setSidebar] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -46,7 +60,6 @@ export default function App() {
   const [sourceIds, setSourceIds] = useState(null);
   const [contactSearch, setContactSearch] = useState('');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const uploadRef = useRef(null);
 
   useEffect(() => { document.documentElement.dataset.bsTheme = settings.theme === 'darkly' ? 'dark' : 'light'; }, [settings.theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4000); return () => clearTimeout(id); }, [toast]);
@@ -78,28 +91,74 @@ export default function App() {
   const active = messages.find(m => m.id === current);
   const mailboxView = !['contacts', 'calendar', 'servers', 'settings', 'save', 'feeds'].includes(view);
   const title = view.startsWith('account:') ? `${accountFor(view.split(':')[1])?.name || 'Account'} › ${(view.split(':')[2] || 'inbox').replace(/^./, c => c.toUpperCase())}` : titles[view] || 'Everything';
-  const openMessage = message => { if (message.folder === 'drafts') { setDraft({ ...emptyDraft(message.account), ...message }); return; } setCurrent(message.id); updateMessages([message.id], { read: true }); };
+  const openMessage = message => {
+    if (message.folder === 'drafts') {
+      const restored = normalizeDraft({ ...message, minimized: false, saveState: 'saved' }, message.account);
+      setDrafts(all => [...all.filter(item => item.id !== restored.id), restored]);
+      return;
+    }
+    setCurrent(message.id); updateMessages([message.id], { read: true });
+  };
   const toggleSelected = id => setSelected(all => all.includes(id) ? all.filter(v => v !== id) : [...all, id]);
-  function compose(kind = 'new', message = null) {
-    const d = emptyDraft(message?.account || accounts[0]?.id || '');
+  function compose(kind = 'new', message = null, contact = null) {
+    const account = message?.account || accounts[0]?.id || '';
+    let d = emptyDraft(account);
+    d.expanded = !!composeSettings.defaultExpanded;
+    if (contact) d.recipients.to = [recipient(contact.email, contact.name)];
     if (message) {
-      d.to = kind === 'reply' ? message.email : '';
+      d.recipients.to = kind === 'reply' ? [recipient(message.email, message.sender)] : [];
       d.subject = `${kind === 'forward' ? 'Fwd: ' : 'Re: '}${message.subject.replace(/^(Re: |Fwd: )/i, '')}`;
       d.body = `\n\n${kind === 'forward' ? '---------- Forwarded message ----------' : `On ${formatDate(message.date)}, ${message.sender} wrote:`}\n${message.body.split('\n').map(s => '> ' + s).join('\n')}`;
+      d.bodyHtml = textToHtml(d.body);
     }
-    setDraft(d);
+    setDrafts(all => [...all, d]);
   }
-  function saveDraft() {
-    if (!draft) return;
-    const account = accountFor(draft.account);
-    const message = { ...draft, id: draft.id || crypto.randomUUID(), sender: 'Me', email: account?.email || '', folder: 'drafts', read: true, flagged: false, date: new Date().toISOString(), subject: draft.subject || '(No subject)' };
-    setMessages(all => [message, ...all.filter(m => m.id !== message.id)]); setDraft(null); notify('Draft saved in this browser.');
+  function updateDraft(next) { setDrafts(all => all.map(item => item.id === next.id ? { ...next, saveState: 'saving' } : item)); }
+  function saveNow(list) {
+    const messagesToSave = list.filter(Boolean).map(item => draftMessage(normalizeDraft(item, item.account), accountFor(item.account), 'drafts'));
+    if (messagesToSave.length) setMessages(all => [...messagesToSave, ...all.filter(message => !messagesToSave.some(item => item.id === message.id))]);
   }
-  function simulateSend(event) {
-    event.preventDefault();
+  function closeDraft(draft) { saveNow([draft]); setDrafts(all => all.filter(item => item.id !== draft.id)); notify('Draft saved in this browser.'); }
+  function discardDraft(draft) {
+    setMessages(all => all.filter(item => item.id !== draft.id));
+    setDrafts(all => all.filter(item => item.id !== draft.id));
+    setDiscarded(draft); notify('Draft discarded. You can undo this.');
+  }
+  async function sendDraft(draft, scheduledAt = null) {
+    const id = draft.id;
+    if (pendingSends.some(item => item.message.id === id) || messages.some(item => item.id === id && ['sent', 'scheduled'].includes(item.folder))) throw new Error('This message is already queued. Duplicate sending was prevented.');
     const account = accountFor(draft.account);
-    const message = { ...draft, id: draft.id || crypto.randomUUID(), sender: 'Me', email: account?.email || '', folder: 'sent', read: true, flagged: false, date: new Date().toISOString(), subject: draft.subject || '(No subject)' };
-    setMessages(all => [message, ...all.filter(m => m.id !== message.id)]); setDraft(null); notify('Preview only: moved to Sent. No email was sent.');
+    if (scheduledAt) {
+      const scheduled = { ...draftMessage(draft, account, 'scheduled'), scheduledAt };
+      setMessages(all => [scheduled, ...all.filter(item => item.id !== id)]);
+      notify('Demo scheduled in this browser. No real email will be delivered.');
+    } else {
+      const pending = { message: draftMessage(draft, account, 'sent'), deliverAt: Date.now() + Number(composeSettings.undoSeconds) * 1000 };
+      setPendingSends(all => [...all.filter(item => item.message.id !== id), pending]);
+      setMessages(all => all.filter(item => item.id !== id));
+      setUndoSend(id); notify(`Demo send queued. Undo is available for ${composeSettings.undoSeconds} seconds.`);
+    }
+    setDrafts(all => all.filter(item => item.id !== id));
+  }
+  function cancelScheduled(message) {
+    const restored = normalizeDraft({ ...message, folder: 'drafts', scheduledAt: undefined, minimized: false }, message.account);
+    setMessages(all => all.filter(item => item.id !== message.id));
+    setDrafts(all => [...all.filter(item => item.id !== restored.id), restored]);
+    notify('Scheduled demo returned to Drafts.');
+  }
+  function undoPending(id) {
+    const pending = pendingSends.find(item => item.message.id === id);
+    if (!pending) return;
+    setPendingSends(all => all.filter(item => item.message.id !== id));
+    const restored = normalizeDraft({ ...pending.message, folder: 'drafts', minimized: false }, pending.message.account);
+    setDrafts(all => [...all.filter(item => item.id !== id), restored]);
+    setUndoSend(null); notify('Demo send cancelled. Your draft is restored.');
+  }
+  function popoutDraft(draft) {
+    saveNow([draft]);
+    const url = `${window.location.origin}${window.location.pathname}?compose=${encodeURIComponent(draft.id)}`;
+    const popup = window.open(url, '_blank', 'width=1000,height=800');
+    if (!popup) notify('The browser blocked the compose window. Allow pop-ups and try again.');
   }
   function remove(ids) { if (!ids.length) return; if (settings.confirmDelete) setModal({ type: 'delete', ids }); else move(ids, 'trash'); }
   function move(ids, folder) { updateMessages(ids, { folder }); setSelected([]); if (ids.includes(current)) setCurrent(null); notify(`${ids.length} sample message${ids.length === 1 ? '' : 's'} moved to ${folder}.`); }

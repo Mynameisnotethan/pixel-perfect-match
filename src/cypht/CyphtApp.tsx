@@ -4,7 +4,7 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 import "./styles/upstream-core.css";
 import "./styles/upstream-theme.css";
 import "./styles/preview.css";
-// @ts-expect-error - original JSX source kept unchanged
+// @ts-expect-error - original JavaScript preview source has no TypeScript declarations
 import App from "./App.jsx";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {

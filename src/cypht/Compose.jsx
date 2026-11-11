@@ -283,7 +283,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     popup.document.close(); popup.focus(); popup.print(); setMenu('');
   }
   function insertTemplate(template) {
-    editor?.commands.focus().insertContent(cleanHtml(template.html)); setDialog(null);
+    editor?.chain().focus().insertContent(cleanHtml(template.html)).run(); setDialog(null);
   }
   const signatures = settings.signatures || [];
   const templates = settings.templates || [];

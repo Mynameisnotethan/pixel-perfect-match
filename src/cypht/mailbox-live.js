@@ -5,7 +5,7 @@ import { MAILBOX_PROVIDERS } from './mailbox-demo.js';
 // Self-hosted web builds (VITE_LOCKBOX_MAIL_API=1) talk to the Lockbox mail server on the same domain.
 async function api(path, init) {
   const res = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `Request failed (${res.status})`); }
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(String(body.error || `Request failed (${res.status})`).replace(/^[a-z_]+: /, '')); }
   return res.status === 204 ? null : res.json();
 }
 const webBridge = {

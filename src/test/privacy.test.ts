@@ -61,3 +61,32 @@ describe("AI defaults and labels", () => {
     expect(view2({ ...m, ...patch }, { body: true }).body).toBe("pay 500 now");
   });
 });
+// @ts-expect-error JS module
+import { makeLabel, addLabel, updateLabel, removeLabel, restoreDefaultLabels, isDuplicateLabel, presetLabels } from "@/cypht/privacy.js";
+describe("label management", () => {
+  it("adds a named label with the chosen colour", () => {
+    const created = makeLabel("  Invoice data  ", "#ea580c", presetLabels);
+    expect(created).toMatchObject({ name: "Invoice data", color: "#ea580c" });
+    expect(created!.id).toMatch(/^custom-/);
+    expect(addLabel(presetLabels, "Invoice data", "#ea580c")).toHaveLength(presetLabels.length + 1);
+  });
+  it("refuses blank and duplicate names", () => {
+    expect(makeLabel("   ", "#16a34a", presetLabels)).toBeNull();
+    expect(makeLabel("financial info", "#16a34a", presetLabels)).toBeNull();
+    expect(isDuplicateLabel("Other", presetLabels)).toBe(true);
+    expect(addLabel(presetLabels, "Other", "#16a34a")).toEqual(presetLabels);
+  });
+  it("renames and recolours without touching other labels", () => {
+    const next = updateLabel(presetLabels, "financial", { name: "Banking", color: "#0891b2" });
+    expect(next.find(l => l.id === "financial")).toEqual({ id: "financial", name: "Banking", color: "#0891b2" });
+    expect(next.find(l => l.id === "personal")).toEqual(presetLabels.find(l => l.id === "personal"));
+    expect(updateLabel(next, "financial", { name: "   " }).find(l => l.id === "financial")!.name).toBe("Banking");
+  });
+  it("removes one label and restores the defaults", () => {
+    expect(removeLabel(presetLabels, "financial").map(l => l.id)).not.toContain("financial");
+    const restored = restoreDefaultLabels();
+    expect(restored).toEqual(presetLabels);
+    restored[0].name = "Changed";
+    expect(presetLabels[0].name).toBe("Financial info");
+  });
+});

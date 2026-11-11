@@ -55,3 +55,4 @@
 
 - [x] Confirm runtime has no shared Lockbox mailbox service or hardcoded provider credentials.
 - [x] Document per-owner GitHub, Hostinger, domain, provider registrations, and encrypted storage.
+- [ ] Move the Outlook device client ID into post-deployment Setup; leave only domain and initial Lockbox login in Hostinger.

@@ -137,3 +137,14 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .compose-privacy .privacy-bar { position: sticky; bottom: 0; margin: 8px auto 0; flex-wrap: wrap; justify-content: center; }
 .compose-privacy-atts { display: flex; flex-wrap: wrap; gap: 6px; }
 .compose-ai-lock.lock-yellow, .compose-ai-lock.lock-red { border-radius: 50%; }
+/* Compose lock view — organised rows matching the normal composer */
+.compose-privacy{gap:0;padding:0 16px;font-size:14px}
+.compose-privacy .privacy-header-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:6px 0;border-bottom:1px solid var(--composer-border)}
+.compose-privacy .privacy-field-label{width:64px;flex:none;margin:0;font-size:11px;color:var(--composer-muted)}
+.compose-privacy .privacy-header-row>.privacy-text,.compose-privacy .privacy-header-row>em{flex:1;min-width:0}
+.compose-privacy>.privacy-field-label{padding:14px 0 6px}
+.compose-privacy>.privacy-text,.compose-privacy>.muted-copy{flex:1 0 auto;min-height:80px}
+.compose-privacy .muted-copy{color:var(--composer-muted);font-size:13px;margin:0}
+.compose-privacy-atts{padding:10px 0}
+.compose-privacy .privacy-bar{position:sticky;bottom:10px;margin:12px auto 10px;max-width:100%;flex-wrap:wrap;justify-content:center;row-gap:8px}
+.compose-privacy .privacy-bar-actions{margin-left:0}

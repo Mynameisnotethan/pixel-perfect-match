@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
+import LabelManager from './LabelManager.jsx';
 import { addRanges, aiView, applyDefaults, labelFor, presetLabels, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
 

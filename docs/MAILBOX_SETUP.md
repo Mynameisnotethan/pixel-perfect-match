@@ -65,7 +65,7 @@ Build the Windows installer on Windows (or a Windows CI runner); building it on 
 
 ## 4. Docker-hosted
 
-Copy `.env.lockbox.example` to `.env.lockbox` next to `docker-compose.yml` and fill it in. Never commit it:
+Set the variables from `.env.lockbox.example` in Hostinger's Environment panel, or copy it to `.env` next to `docker-compose.yml`. Never commit it:
 
 ```
 LOCKBOX_PUBLIC_URL=https://mail.example.com      # callbacks are derived from this

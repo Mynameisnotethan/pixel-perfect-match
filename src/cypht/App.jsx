@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
-import { aiView, isReceived, lockStatus, mask, mergeRanges, segments, subtractRange } from './privacy.js';
+import { aiView, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
 
 const STORE = 'cypht-preview:v1:';
@@ -28,6 +28,12 @@ function useSaved(key, initial) {
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
+function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, inline = false }) {
+  const Tag = inline ? 'span' : 'div';
+  return <Tag className={`privacy-text selecting ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
+    {selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`}>{part.hidden ? mask(part.text) : part.text}</span>)}
+  </Tag>;
+}
 function Dialog({ title, onClose, children, wide = false }) {
   const ref = useRef(null);
   useEffect(() => { const el = ref.current; el.showModal(); return () => { if (el.open) el.close(); }; }, []);
@@ -142,19 +148,38 @@ export default function App() {
     setCurrent(message.id); setPrivacy(null); setPendRanges([]); setPendAtts([]); updateMessages([message.id], isReceived(message) ? { read: true, reviewed: true } : { read: true });
   };
   function captureSelection() {
-    const sel = window.getSelection(); if (!privacy || !sel || sel.isCollapsed) return;
-    const off = (node, o) => { const span = (node.nodeType === 3 ? node.parentElement : node)?.closest?.('[data-start]'); return span ? Number(span.dataset.start) + (node.nodeType === 3 ? o : 0) : null; };
-    const a = off(sel.anchorNode, sel.anchorOffset), b = off(sel.focusNode, sel.focusOffset);
-    if (a == null || b == null || a === b) return;
-    setPendRanges(x => mergeRanges([...x, [Math.min(a, b), Math.max(a, b)]])); sel.removeAllRanges();
+    const selection = window.getSelection();
+    if (!privacy || !selection || selection.isCollapsed) return;
+    const rootFor = node => (node?.nodeType === 3 ? node.parentElement : node)?.closest?.('[data-privacy-root]');
+    const root = rootFor(selection.anchorNode);
+    if (!root || root !== rootFor(selection.focusNode)) return;
+    const offset = (node, nodeOffset) => {
+      const range = document.createRange();
+      range.selectNodeContents(root);
+      range.setEnd(node, nodeOffset);
+      return range.toString().length;
+    };
+    const anchor = offset(selection.anchorNode, selection.anchorOffset);
+    const focus = offset(selection.focusNode, selection.focusOffset);
+    if (anchor === focus) return;
+    setPendRanges(currentRanges => [...currentRanges, { field: root.dataset.privacyField, start: Math.min(anchor, focus), end: Math.max(anchor, focus) }]);
+    selection.removeAllRanges();
   }
   function confirmPrivacy() {
     if (!active) return;
-    let ranges = active.hiddenRanges || [], atts = active.hiddenAttachments || [];
-    if (privacy === 'lock') { ranges = mergeRanges([...ranges, ...pendRanges]); atts = [...new Set([...atts, ...pendAtts])]; }
-    else { pendRanges.forEach(r => { ranges = subtractRange(ranges, r); }); atts = atts.filter(i => !pendAtts.includes(i)); }
-    updateMessages([active.id], { hiddenRanges: ranges, hiddenAttachments: atts, reviewed: true });
-    setPendRanges([]); setPendAtts([]); notify(privacy === 'lock' ? 'Hidden from the AI agent.' : 'Visible to the AI agent again.');
+    const patch = { reviewed: true };
+    for (const { field, key } of privacyFields) {
+      const selected = pendRanges.filter(range => range.field === field).map(({ start, end }) => [start, end]);
+      let ranges = active[key] || [];
+      if (privacy === 'lock') ranges = mergeRanges([...ranges, ...selected]);
+      else selected.forEach(range => { ranges = subtractRange(ranges, range); });
+      patch[key] = ranges;
+    }
+    let atts = active.hiddenAttachments || [];
+    if (privacy === 'lock') atts = [...new Set([...atts, ...pendAtts])];
+    else atts = atts.filter(i => !pendAtts.includes(i));
+    updateMessages([active.id], { ...patch, hiddenAttachments: atts });
+    setPendRanges([]); setPendAtts([]); notify(privacy === 'lock' ? 'Hidden from the AI agent. Original text stays visible when you finish.' : 'Visible to the AI agent again.');
   }
   const toggleSelected = id => setSelected(all => all.includes(id) ? all.filter(v => v !== id) : [...all, id]);
   function compose(kind = 'new', message = null, contact = null) {
@@ -229,6 +254,9 @@ export default function App() {
   function move(ids, folder) { updateMessages(ids, { folder }); setSelected([]); if (ids.includes(current)) setCurrent(null); notify(`${ids.length} sample message${ids.length === 1 ? '' : 's'} moved to ${folder}.`); }
   const nav = (key, label, icon, count = 0) => <li key={key} className={view === key ? 'selected_menu' : ''}><button className="nav-item-button" onClick={() => go(key)} title={label}><Icon name={icon} className="menu-icon" /><span className="nav-label">{label}</span>{count > 0 && <span className="nav-count">{count}</span>}</button></li>;
   const group = (key, label) => <button className="src_name section-toggle" aria-expanded={groups[key]} onClick={() => setGroups(g => ({ ...g, [key]: !g[key] }))}>{label}<Icon name={groups[key] ? 'chevron-up' : 'chevron-down'} /></button>;
+  const pendingFor = field => mergeRanges(pendRanges.filter(range => range.field === field).map(({ start, end }) => [start, end]));
+  const privateText = (field, text, hiddenRanges, inline = false) => <PrivacyText field={field} text={text} hiddenRanges={hiddenRanges} pendingRanges={pendingFor(field)} onSelect={captureSelection} inline={inline} />;
+  const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>
     <div className="preview-banner"><span><span className="preview-dot" /> Editable preview <span className="banner-detail">· Sample accounts and messages</span></span><button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></div>
@@ -288,7 +316,7 @@ export default function App() {
               {visible.length === 0 && <div className="empty-state"><Icon name={query ? 'search' : 'inbox'} /><h2>{query ? 'No matching messages' : 'No messages'}</h2><p>{query ? 'Try a different name, subject, or keyword.' : 'This folder has no sample messages.'}</p>{query && <button className="btn btn-outline-secondary" onClick={() => setQuery('')}>Clear search</button>}</div>}
               <div className="list-pagination"><span>{visible.length ? `${(activePage - 1) * Number(settings.pageSize) + 1}–${Math.min(activePage * Number(settings.pageSize), visible.length)} of ${visible.length}` : '0 messages'}</span><div><Tool icon="chevron-left" label="Previous page" disabled={activePage === 1} onClick={() => setPage(activePage - 1)} /><span>Page {activePage} of {pages}</span><Tool icon="chevron-right" label="Next page" disabled={activePage === pages} onClick={() => setPage(activePage + 1)} /></div></div>
             </section>}
-            {active && <article className="message-reader"><div className="reader-toolbar"><Tool icon="arrow-left" label="Back to messages" onClick={() => setCurrent(null)}> Back</Tool><div>{isReceived(active) && <Tool icon="lock" label="Hide from AI" className={privacy ? 'privacy-active' : ''} onClick={() => { setPrivacy(p => p ? null : 'lock'); setPendRanges([]); setPendAtts([]); }} />}<Tool icon="reply" label="Reply" onClick={() => compose('reply', active)} /><Tool icon="forward" label="Forward" onClick={() => compose('forward', active)} /><Tool icon={active.flagged ? 'flag-fill' : 'flag'} label="Toggle message flag" onClick={() => updateMessages([active.id], { flagged: !active.flagged })} /><Tool icon="envelope" label="Mark message unread" onClick={() => { updateMessages([active.id], { read: false }); setCurrent(null); }} /><Tool icon="archive" label="Archive message" onClick={() => move([active.id], 'archive')} /><Tool icon="inbox" label="Move message to Inbox" onClick={() => move([active.id], 'inbox')} /><Tool icon="trash" label="Delete message" onClick={() => remove([active.id])} /></div></div><div className="reader-content"><h2>{active.subject}</h2><div className="message-headers"><div className="sender-avatar">{active.sender.slice(0, 1)}</div><div><strong>{active.sender}</strong> <span>&lt;{active.email}&gt;</span><p>To: {active.to || accountFor(active.account)?.email}</p></div><time>{messageTime(active.date)}</time></div>{active.folder === 'scheduled' && <div className="scheduled-notice"><Icon name="clock-history" /><span>Demo scheduled for {messageTime(active.scheduledAt)}. It is processed only while this browser app is open.</span><button className="btn btn-sm btn-outline-secondary" onClick={() => cancelScheduled(active)}>Cancel send</button></div>}<div className="message-body">{(privacy || active.hiddenRanges?.length) ? <div className={`privacy-text ${privacy ? 'selecting' : ''}`} onMouseUp={captureSelection}>{segments(active.body || '', active.hiddenRanges).flatMap(p => segments(p.text, pendRanges.map(([a, b]) => [a - p.start, b - p.start]).filter(([a, b]) => b > 0 && a < p.text.length).map(([a, b]) => [Math.max(0, a), Math.min(p.text.length, b)])).map(q => ({ ...q, start: q.start + p.start, hidden: p.hidden, pend: q.hidden }))).map(p => <span key={p.start} data-start={p.start} className={`${p.hidden ? 'hidden-text' : ''} ${p.pend ? 'pending-sel' : ''}`}>{p.hidden ? mask(p.text) : p.text}</span>)}</div> : active.bodyHtml ? <div className="rich-message-content" dangerouslySetInnerHTML={{ __html: cleanHtml(active.bodyHtml) }} /> : active.body}</div>{active.attachments?.length > 0 && <div className="attachments"><h3>Attachments</h3>{active.attachments.map((a, i) => { const hid = (active.hiddenAttachments || []).includes(i); return <button key={i} className={`${hid ? 'att-hidden' : ''} ${pendAtts.includes(i) ? 'att-picked' : ''}`} onClick={() => { if (privacy) { if ((privacy === 'lock') !== hid) setPendAtts(x => x.includes(i) ? x.filter(v => v !== i) : [...x, i]); return; } if (a.content?.startsWith('data:')) { const link = document.createElement('a'); link.href = a.content; link.download = a.name; link.click(); } else downloadText(a.name, a.content || 'Attachment metadata only. Re-add the original file to download it.'); }}><Icon name={hid ? 'lock-fill' : 'file-earmark-text'} /><span>{hid ? mask(a.name) : a.name}</span><Icon name={hid ? 'eye-slash' : 'download'} /></button>; })}</div>}{privacy && <PrivacyBar mode={privacy} setMode={m => { setPrivacy(m); setPendRanges([]); setPendAtts([]); }} pending={pendRanges.length + pendAtts.length} onClose={() => { setPrivacy(null); setPendRanges([]); setPendAtts([]); }} onConfirm={confirmPrivacy} />}<div className="reader-bottom"><button className="btn btn-outline-secondary" onClick={() => compose('reply', active)}><Icon name="reply" /> Reply</button><button className="btn btn-outline-secondary" onClick={() => compose('forward', active)}><Icon name="forward" /> Forward</button></div></div></article>}
+            {active && <article className="message-reader"><div className="reader-toolbar"><Tool icon="arrow-left" label="Back to messages" onClick={() => setCurrent(null)}> Back</Tool><div>{isReceived(active) && <Tool icon={lockStatus(active) === 'green' ? 'unlock-fill' : 'lock-fill'} label={`Hide from AI — ${privacyStatusLabels[lockStatus(active)]}`} className={`reader-lock lock-${lockStatus(active)} ${privacy ? 'privacy-active' : ''}`} onClick={() => { setPrivacy(p => p ? null : 'lock'); setPendRanges([]); setPendAtts([]); }} />}<Tool icon="reply" label="Reply" onClick={() => compose('reply', active)} /><Tool icon="forward" label="Forward" onClick={() => compose('forward', active)} /><Tool icon={active.flagged ? 'flag-fill' : 'flag'} label="Toggle message flag" onClick={() => updateMessages([active.id], { flagged: !active.flagged })} /><Tool icon="envelope" label="Mark message unread" onClick={() => { updateMessages([active.id], { read: false }); setCurrent(null); }} /><Tool icon="archive" label="Archive message" onClick={() => move([active.id], 'archive')} /><Tool icon="inbox" label="Move message to Inbox" onClick={() => move([active.id], 'inbox')} /><Tool icon="trash" label="Delete message" onClick={() => remove([active.id])} /></div></div><div className="reader-content"><h2>{privacy ? privateText('subject', active.subject, active.hiddenSubjectRanges) : active.subject}</h2><div className="message-headers"><div className="sender-avatar">{active.sender.slice(0, 1)}</div><div><strong>{privacy ? privateText('sender', active.sender, active.hiddenSenderRanges, true) : active.sender}</strong> <span>&lt;{privacy ? privateText('email', active.email, active.hiddenEmailRanges, true) : active.email}&gt;</span><p>To: {active.to || accountFor(active.account)?.email}</p></div><time>{messageTime(active.date)}</time></div>{active.folder === 'scheduled' && <div className="scheduled-notice"><Icon name="clock-history" /><span>Demo scheduled for {messageTime(active.scheduledAt)}. It is processed only while this browser app is open.</span><button className="btn btn-sm btn-outline-secondary" onClick={() => cancelScheduled(active)}>Cancel send</button></div>}<div className="message-body">{privacy ? privateText('body', active.body, active.hiddenRanges) : active.bodyHtml ? <div className="rich-message-content" dangerouslySetInnerHTML={{ __html: cleanHtml(active.bodyHtml) }} /> : active.body}</div>{active.attachments?.length > 0 && <div className="attachments"><h3>Attachments</h3>{active.attachments.map((a, i) => { const hid = (active.hiddenAttachments || []).includes(i); return <button key={i} className={`${privacy && hid ? 'att-hidden' : ''} ${pendAtts.includes(i) ? 'att-picked' : ''}`} onClick={() => { if (privacy) { if ((privacy === 'lock') !== hid) setPendAtts(x => x.includes(i) ? x.filter(v => v !== i) : [...x, i]); return; } if (a.content?.startsWith('data:')) { const link = document.createElement('a'); link.href = a.content; link.download = a.name; link.click(); } else downloadText(a.name, a.content || 'Attachment metadata only. Re-add the original file to download it.'); }}><Icon name={privacy && hid ? 'lock-fill' : 'file-earmark-text'} /><span>{privacy && hid ? mask(a.name) : a.name}</span><Icon name={privacy && hid ? 'eye-slash' : 'download'} /></button>; })}</div>}{privacy && <PrivacyBar mode={privacy} setMode={m => { setPrivacy(m); setPendRanges([]); setPendAtts([]); }} pending={pendRanges.length + pendAtts.length} onClose={() => { setPrivacy(null); setPendRanges([]); setPendAtts([]); }} onConfirm={confirmPrivacy} />}<div className="reader-bottom"><button className="btn btn-outline-secondary" onClick={() => compose('reply', active)}><Icon name="reply" /> Reply</button><button className="btn btn-outline-secondary" onClick={() => compose('forward', active)}><Icon name="forward" /> Forward</button></div></div></article>}
           </div>
         </>}
 

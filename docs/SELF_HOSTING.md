@@ -26,7 +26,12 @@ Fork the repository into your own GitHub account, or clone and push it to a repo
 
 1. Rent your own **Hostinger VPS** with Ubuntu 24.04 and Docker. Shared web hosting cannot run this stack.
 2. Use your own domain. Create an `A` record such as `mail.example.com` pointing to your VPS.
-3. In Hostinger, open **Docker Manager → Compose → From URL** and enter your repository URL.
+3. In Hostinger, open **Docker Manager → Compose → From URL** and enter the **raw** link to your copy of
+   `docker-compose.yml`: `https://raw.githubusercontent.com/<your-username>/<your-repo>/main/docker-compose.yml`.
+   A `github.com/.../blob/...` page link is not a Compose file and Hostinger reports "Docker project not found".
+4. The stack runs from images your repository builds on GitHub. Make those packages public once
+   (**github.com/<you>?tab=packages** → each `lockbox-*` package → **Package settings** → **Change visibility** →
+   **Public**), or set `LOCKBOX_IMAGE_ORG` to a username whose public images you want to run.
 
 ### 3. Deploy with only the server login settings
 

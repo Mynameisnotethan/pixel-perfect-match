@@ -130,3 +130,4 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .privacy-text.selecting .pending-sel { cursor: pointer; border-radius: 3px; padding: 1px 0; background: color-mix(in srgb, var(--bs-primary) 28%, transparent); outline: 2px solid var(--bs-primary); outline-offset: 0; }
 .privacy-text.mode-unlock .pending-sel { background: color-mix(in srgb, var(--bs-success) 28%, transparent); outline-color: var(--bs-success); text-decoration: none; }
 .privacy-text.mode-lock .pending-sel.hidden-text, .privacy-text.mode-unlock .pending-sel.hidden-text { border-bottom-style: dashed; }
+.ai-subhead{font-size:14px;font-weight:600;color:var(--preview-muted)}

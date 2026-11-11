@@ -4,6 +4,7 @@ WORKDIR /app
 COPY connectors ./connectors
 COPY server ./server
 ENV LOCKBOX_DATA_DIR=/data PORT=3000
+RUN mkdir -p /data && chown node:node /data
 VOLUME ["/data"]
 EXPOSE 3000
 USER node

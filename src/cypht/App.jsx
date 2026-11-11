@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { initialAccounts, initialContacts, initialSettings, seedMessages } from './data.js';
 import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
-import { aiView, isReceived, lockStatus, mask, mergeRanges, segments, subtractRange } from './privacy.js';
+import { aiView, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
 
 const STORE = 'cypht-preview:v1:';
@@ -28,6 +28,12 @@ function useSaved(key, initial) {
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
+function PrivacyText({ field, text, hiddenRanges, pendingRanges, onSelect, inline = false }) {
+  const Tag = inline ? 'span' : 'div';
+  return <Tag className={`privacy-text selecting ${inline ? 'privacy-inline' : ''}`} data-privacy-root="true" data-privacy-field={field} onMouseUp={onSelect}>
+    {selectionSegments(text || '', hiddenRanges, pendingRanges).map(part => <span key={part.start} data-start={part.start} className={`${part.hidden ? 'hidden-text' : ''} ${part.pending ? 'pending-sel' : ''}`}>{part.hidden ? mask(part.text) : part.text}</span>)}
+  </Tag>;
+}
 function Dialog({ title, onClose, children, wide = false }) {
   const ref = useRef(null);
   useEffect(() => { const el = ref.current; el.showModal(); return () => { if (el.open) el.close(); }; }, []);
@@ -142,19 +148,38 @@ export default function App() {
     setCurrent(message.id); setPrivacy(null); setPendRanges([]); setPendAtts([]); updateMessages([message.id], isReceived(message) ? { read: true, reviewed: true } : { read: true });
   };
   function captureSelection() {
-    const sel = window.getSelection(); if (!privacy || !sel || sel.isCollapsed) return;
-    const off = (node, o) => { const span = (node.nodeType === 3 ? node.parentElement : node)?.closest?.('[data-start]'); return span ? Number(span.dataset.start) + (node.nodeType === 3 ? o : 0) : null; };
-    const a = off(sel.anchorNode, sel.anchorOffset), b = off(sel.focusNode, sel.focusOffset);
-    if (a == null || b == null || a === b) return;
-    setPendRanges(x => mergeRanges([...x, [Math.min(a, b), Math.max(a, b)]])); sel.removeAllRanges();
+    const selection = window.getSelection();
+    if (!privacy || !selection || selection.isCollapsed) return;
+    const rootFor = node => (node?.nodeType === 3 ? node.parentElement : node)?.closest?.('[data-privacy-root]');
+    const root = rootFor(selection.anchorNode);
+    if (!root || root !== rootFor(selection.focusNode)) return;
+    const offset = (node, nodeOffset) => {
+      const range = document.createRange();
+      range.selectNodeContents(root);
+      range.setEnd(node, nodeOffset);
+      return range.toString().length;
+    };
+    const anchor = offset(selection.anchorNode, selection.anchorOffset);
+    const focus = offset(selection.focusNode, selection.focusOffset);
+    if (anchor === focus) return;
+    setPendRanges(currentRanges => [...currentRanges, { field: root.dataset.privacyField, start: Math.min(anchor, focus), end: Math.max(anchor, focus) }]);
+    selection.removeAllRanges();
   }
   function confirmPrivacy() {
     if (!active) return;
-    let ranges = active.hiddenRanges || [], atts = active.hiddenAttachments || [];
-    if (privacy === 'lock') { ranges = mergeRanges([...ranges, ...pendRanges]); atts = [...new Set([...atts, ...pendAtts])]; }
-    else { pendRanges.forEach(r => { ranges = subtractRange(ranges, r); }); atts = atts.filter(i => !pendAtts.includes(i)); }
-    updateMessages([active.id], { hiddenRanges: ranges, hiddenAttachments: atts, reviewed: true });
-    setPendRanges([]); setPendAtts([]); notify(privacy === 'lock' ? 'Hidden from the AI agent.' : 'Visible to the AI agent again.');
+    const patch = { reviewed: true };
+    for (const { field, key } of privacyFields) {
+      const selected = pendRanges.filter(range => range.field === field).map(({ start, end }) => [start, end]);
+      let ranges = active[key] || [];
+      if (privacy === 'lock') ranges = mergeRanges([...ranges, ...selected]);
+      else selected.forEach(range => { ranges = subtractRange(ranges, range); });
+      patch[key] = ranges;
+    }
+    let atts = active.hiddenAttachments || [];
+    if (privacy === 'lock') atts = [...new Set([...atts, ...pendAtts])];
+    else atts = atts.filter(i => !pendAtts.includes(i));
+    updateMessages([active.id], { ...patch, hiddenAttachments: atts });
+    setPendRanges([]); setPendAtts([]); notify(privacy === 'lock' ? 'Hidden from the AI agent. Original text stays visible when you finish.' : 'Visible to the AI agent again.');
   }
   const toggleSelected = id => setSelected(all => all.includes(id) ? all.filter(v => v !== id) : [...all, id]);
   function compose(kind = 'new', message = null, contact = null) {
@@ -229,6 +254,9 @@ export default function App() {
   function move(ids, folder) { updateMessages(ids, { folder }); setSelected([]); if (ids.includes(current)) setCurrent(null); notify(`${ids.length} sample message${ids.length === 1 ? '' : 's'} moved to ${folder}.`); }
   const nav = (key, label, icon, count = 0) => <li key={key} className={view === key ? 'selected_menu' : ''}><button className="nav-item-button" onClick={() => go(key)} title={label}><Icon name={icon} className="menu-icon" /><span className="nav-label">{label}</span>{count > 0 && <span className="nav-count">{count}</span>}</button></li>;
   const group = (key, label) => <button className="src_name section-toggle" aria-expanded={groups[key]} onClick={() => setGroups(g => ({ ...g, [key]: !g[key] }))}>{label}<Icon name={groups[key] ? 'chevron-up' : 'chevron-down'} /></button>;
+  const pendingFor = field => mergeRanges(pendRanges.filter(range => range.field === field).map(({ start, end }) => [start, end]));
+  const privateText = (field, text, hiddenRanges, inline = false) => <PrivacyText field={field} text={text} hiddenRanges={hiddenRanges} pendingRanges={pendingFor(field)} onSelect={captureSelection} inline={inline} />;
+  const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>
     <div className="preview-banner"><span><span className="preview-dot" /> Editable preview <span className="banner-detail">· Sample accounts and messages</span></span><button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></div>

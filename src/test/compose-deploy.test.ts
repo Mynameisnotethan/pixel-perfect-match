@@ -35,11 +35,26 @@ describe("docker-compose.yml is deployable from a bare URL", () => {
     expect(readFileSync("Dockerfile.proxy", "utf8")).toMatch(/COPY deploy\/Caddyfile \/etc\/caddy\/Caddyfile/);
   });
 
-  it("still requires the domain and the login password", () => {
+  it("needs nothing but the domain, and keeps the data volume", () => {
     const caddy = serviceBlock("caddy");
     expect(caddy).toMatch(/LOCKBOX_DOMAIN: \$\{LOCKBOX_DOMAIN:\?/);
-    expect(caddy).toMatch(/LOCKBOX_LOGIN_PASSWORD: \$\{LOCKBOX_LOGIN_PASSWORD:\?/);
     expect(serviceBlock("mail")).toMatch(/lockbox-data:\/data/);
+  });
+
+  it("asks for no login credentials before deployment", () => {
+    // The administrator is created in the browser with a one-time setup code instead.
+    expect(compose).not.toMatch(/LOCKBOX_LOGIN_PASSWORD/);
+    expect(compose).not.toMatch(/LOCKBOX_LOGIN_USER/);
+    expect(compose).not.toMatch(/LOCKBOX_USER_HEADER/);
+    expect(compose).not.toMatch(/hash-password/);
+  });
+
+  it("lets the mail server own sign-in, so Caddy stores no password", () => {
+    const caddyfile = readFileSync("deploy/Caddyfile", "utf8");
+    expect(caddyfile).not.toMatch(/basic_auth/);
+    expect(caddyfile).toMatch(/\/api\/auth\/\*/);
+    expect(caddyfile).toMatch(/reverse_proxy mail:3000/);
+    expect(caddyfile).toMatch(/reverse_proxy web:3000/);
   });
 
   it("lets each owner run images built from their own repository", () => {

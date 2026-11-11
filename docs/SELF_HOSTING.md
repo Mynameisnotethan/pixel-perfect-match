@@ -33,19 +33,32 @@ Fork the repository into your own GitHub account, or clone and push it to a repo
    (**github.com/<you>?tab=packages** → each `lockbox-*` package → **Package settings** → **Change visibility** →
    **Public**), or set `LOCKBOX_IMAGE_ORG` to a username whose public images you want to run.
 
-### 3. Deploy with only the server login settings
+### 3. Deploy with only the domain
 
 In Hostinger's **Environment** section, enter only:
 
 | Name | Value |
 |---|---|
-| `LOCKBOX_DOMAIN` | Your full hostname, such as `mail.example.com` |
-| `LOCKBOX_LOGIN_USER` | Your Lockbox administrator login |
-| `LOCKBOX_LOGIN_PASSWORD` | A new, long password for this installation |
+| `LOCKBOX_DOMAIN` | Your full hostname, such as `mail.example.com` (no `https://`, no trailing slash) |
 
-Click **Deploy**. Keep Hostinger's `lockbox-data` volume: it contains the automatically generated encryption key, encrypted provider settings, and encrypted mailbox tokens. Deleting it requires every mailbox to reconnect.
+Click **Deploy**. Keep Hostinger's `lockbox-data` volume: it contains the automatically generated encryption
+key, encrypted provider settings, encrypted accounts and sessions, and encrypted mailbox tokens. Deleting it
+requires every mailbox to reconnect.
 
-### 4. Add your own Google credentials after deployment
+### 4. Create the administrator in your browser
+
+Open your Lockbox address. Because no account exists yet, you get a one-time **Set up Lockbox** page.
+
+1. Open the **mail** container's logs (Hostinger Docker Manager → this project → mail → logs, or
+   `docker compose logs mail`) and copy the one-time setup code.
+2. Paste the code, choose your administrator username and a password of at least 10 characters, and save.
+3. Sign in with that username and password.
+
+The code is printed only in the container log, never shown in the browser, and closes for good once the account
+exists. Nobody can create an account without it, and two people racing through the page cannot both become
+administrator. This step is what replaces the old `LOCKBOX_LOGIN_USER` / `LOCKBOX_LOGIN_PASSWORD` variables.
+
+### 5. Add your own Google credentials after deployment
 
 Open your Lockbox address, choose **Add mailbox**, sign in with the Lockbox administrator login, and open **Setup**.
 
@@ -56,7 +69,7 @@ Open your Lockbox address, choose **Add mailbox**, sign in with the Lockbox admi
 
 The credentials are saved in your server's encrypted settings. They are not sent to the original developer. While your Google consent screen is in Testing, add each mailbox owner as a test user; Google may expire test grants after seven days. Public use of restricted Gmail scopes requires Google's verification process.
 
-### 5. Add your own Outlook credentials after deployment
+### 6. Add your own Outlook credentials after deployment
 
 Stay in **Setup → Outlook**. In your own Microsoft Entra account:
 
@@ -67,7 +80,7 @@ Stay in **Setup → Outlook**. In your own Microsoft Entra account:
 
 This registration belongs to you. Do not use the original developer's client ID. If an organization blocks sign-in by code, expand **Use an Outlook web app instead** and enter a separate web app's ID and secret there.
 
-### 6. Connect mailboxes
+### 7. Connect mailboxes
 
 Each mailbox user selects **Connect Gmail** or **Connect Outlook**, then signs in to **their own** provider account and approves access. Their provider account is separate from the Lockbox login.
 

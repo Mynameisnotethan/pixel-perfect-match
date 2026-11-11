@@ -6,6 +6,8 @@ import "./styles/upstream-theme.css";
 import "./styles/preview.css";
 // @ts-expect-error - original JavaScript preview source has no TypeScript declarations
 import App from "./App.jsx";
+// @ts-expect-error - original JavaScript preview source has no TypeScript declarations
+import { AuthProvider, AuthGate } from "./AuthScreens.jsx";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
@@ -16,4 +18,5 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean
     return this.props.children;
   }
 }
-export default function CyphtApp() { return <ErrorBoundary><App /></ErrorBoundary>; }
+// AuthGate is a no-op in the preview and the desktop app; only the self-hosted web build shows it.
+export default function CyphtApp() { return <ErrorBoundary><AuthProvider><AuthGate><App /></AuthGate></AuthProvider></ErrorBoundary>; }

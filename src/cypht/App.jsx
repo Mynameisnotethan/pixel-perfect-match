@@ -45,10 +45,12 @@ const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', b
 const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 import MailboxDialog from './MailboxDialog.jsx';
+import { useAuth } from './AuthScreens.jsx';
 import { liveBridge, inboxToMessages, liveAccount } from './mailbox-live.js';
 import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId } from './mailbox-demo.js';
 
 export default function App() {
+  const auth = useAuth();
   const [accounts, setAccounts] = useSaved('accounts', initialAccounts);
   const [messages, setMessages, messagesStorageError] = useSaved('messages', seedMessages);
   const [contacts, setContacts] = useSaved('contacts', initialContacts);
@@ -278,7 +280,7 @@ export default function App() {
   const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>
-    <div className="preview-banner"><span><span className="preview-dot" /> Editable preview <span className="banner-detail">· Sample accounts and messages</span></span><button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></div>
+    <div className="preview-banner"><span><span className="preview-dot" /> {auth.web ? <>Signed in as <strong>{auth.user}</strong></> : <>Editable preview <span className="banner-detail">· Sample accounts and messages · Demo sign-in, no server</span></>}</span><span className="banner-actions">{auth.web && <button onClick={() => auth.signOut()}>Sign out <Icon name="box-arrow-right" /></button>}<button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></span></div>
     <header className="mobile-header"><Tool icon="list" label="Open navigation" onClick={() => setSidebar(!sidebar)} /><img src={settings.theme === 'darkly' ? logoLight.url : logoDark.url} alt="Lockbox" /><span>{title}</span></header>
     {sidebar && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebar(false)} />}
     <div className="cypht-layout">
@@ -310,7 +312,7 @@ export default function App() {
         </ul>}
         {group('feeds', 'Feed')}{groups.feeds && <ul className="folders">{nav('feeds', 'News feeds', 'rss')}</ul>}
         {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Site', 'gear-wide-connected')}{nav('ai', 'AI Access', 'robot')}{nav('save', 'Save', 'download')}</ul>}
-        <div className="sidebar-footer"><button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button><button onClick={() => notify('Preview is up to date. Real mail sync is not connected.')} title="Reload preview"><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button><button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
+        <div className="sidebar-footer"><button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button><button onClick={() => notify('Preview is up to date. Real mail sync is not connected.')} title="Reload preview"><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button>{auth.web && <button onClick={() => auth.signOut()} title="Sign out"><Icon name="box-arrow-right" /><span className="nav-label"> Sign out</span></button>}<button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
       </div></nav>
       <main className="content_cell" id="main-content">
         {mailboxView && <>

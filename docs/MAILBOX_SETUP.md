@@ -68,20 +68,23 @@ Build the Windows installer on Windows (or a Windows CI runner); building it on 
 Set the variables from `.env.lockbox.example` in Hostinger's Environment panel, or copy it to `.env` next to `docker-compose.yml`. Never commit it:
 
 ```
-LOCKBOX_PUBLIC_URL=https://mail.example.com      # callbacks are derived from this
-LOCKBOX_TOKEN_KEY=<32 random bytes, base64>      # openssl rand -base64 32
+LOCKBOX_DOMAIN=mail.example.com                  # the only value needed before deployment
+LOCKBOX_PUBLIC_URL=https://mail.example.com      # optional override; callbacks are derived from this
+LOCKBOX_TOKEN_KEY=<32 random bytes, base64>      # optional: auto-generated on the data volume
+# Provider credentials normally go in post-deploy Setup instead of the environment:
 LOCKBOX_GOOGLE_CLIENT_ID=...
 LOCKBOX_GOOGLE_CLIENT_SECRET=...
 LOCKBOX_MS_CLIENT_ID=...
 LOCKBOX_MS_CLIENT_SECRET=...
-LOCKBOX_USER_HEADER=x-forwarded-user             # set by your auth proxy
-# LOCKBOX_SINGLE_USER=1                          # alternative: one-user install
 ```
 
 Routes:
 
 | Route | Purpose |
 |---|---|
+| `GET /api/auth/session` | `ok` / `needs-login` / `needs-setup` — never a setup code or password |
+| `POST /api/auth/setup` | Create the first administrator; needs the one-time code from the container log |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Start / end a session cookie |
 | `GET /oauth/google/start`, `GET /oauth/microsoft/start` | Begin connect (redirects to the provider) |
 | `GET /oauth/google/callback`, `GET /oauth/microsoft/callback` | Register these exact URLs with the providers |
 | `GET /api/mailboxes` | List the signed-in user's mailboxes (no tokens) |
@@ -91,17 +94,28 @@ Routes:
 
 Storage and security:
 - Tokens are encrypted with AES-256-GCM using `LOCKBOX_TOKEN_KEY` and written to `/data/mailboxes.enc`. **Mount `/data` as a persistent volume** (the compose file does this). Losing the key or the volume means every mailbox must reconnect.
-- Each mailbox belongs to the Lockbox user who authorised it. The user comes from `LOCKBOX_USER_HEADER`, so run the container **only** behind an HTTPS reverse proxy that authenticates users and sets that header. Never expose port 3000 directly.
+- Every mailbox and admin route requires a valid `lockbox_session` cookie issued by this server. A username
+  header sent by the browser is ignored, so nothing can claim to be someone else, and mutating requests must
+  also echo the CSRF token the server handed the browser.
+- Each mailbox belongs to the Lockbox user who authorised it. Accounts and sessions are kept in
+  `/data/accounts.enc` and `/data/sessions.enc`, encrypted with the same volume key: passwords as salted
+  scrypt hashes, sessions as random tokens stored only as SHA-256 hashes with a 12-hour sliding expiry.
+- The first-run setup code is printed to the container log once and is never served to a browser. Setup closes
+  permanently the moment the first account exists.
 - Logs record only the method, path and error message. Tokens, codes and query strings are never logged.
-- Pending OAuth states are kept in memory for 10 minutes. Run one replica, or swap in a shared store.
+- Pending OAuth states are kept in memory for 10 minutes, each tied to the signed-in user who started it.
+  Run one replica, or swap in a shared store.
 
 ```bash
-docker compose up -d --build
+docker compose pull && docker compose up -d
+docker compose logs mail        # the one-time setup code, before any account exists
 ```
 
 ## 5. What still needs live verification
 
 None of the steps below have been run against real accounts yet:
+- Complete first-run setup on a real Hostinger deployment: read the code from the mail container's logs,
+  create the administrator, sign in, and confirm setup cannot be run again.
 - Connect a real Gmail / Workspace account and a real Outlook.com / Microsoft 365 account, on desktop and Docker.
 - Load the inbox, send a test message, restart the app or container, and confirm the mailbox is still connected.
 - Revoke access in the Google or Microsoft account settings and confirm **Reconnect required** appears.

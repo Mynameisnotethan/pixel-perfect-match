@@ -3,8 +3,13 @@
 import { MAILBOX_PROVIDERS } from './mailbox-demo.js';
 
 // Self-hosted web builds (VITE_LOCKBOX_MAIL_API=1) talk to the Lockbox mail server on the same domain.
-async function api(path, init) {
-  const res = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
+// The session cookie is unreadable to scripts on purpose; this one is readable and must be echoed
+// back as a header on every state-changing call, so another site cannot make a signed-in browser act.
+const csrfToken = () => (typeof document === 'undefined' ? '' : (document.cookie.match(/(?:^|;\s*)lockbox_csrf=([^;]*)/) || [])[1] || '');
+async function api(path, init = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(init.headers || {}) };
+  if (init.method && init.method !== 'GET') headers['x-lockbox-csrf'] = csrfToken();
+  const res = await fetch(path, { credentials: 'same-origin', ...init, headers });
   if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(String(body.error || `Request failed (${res.status})`).replace(/^[a-z_]+: /, '')); }
   return res.status === 204 ? null : res.json();
 }
@@ -15,6 +20,11 @@ const webBridge = {
   providers: () => api('/api/mailboxes/providers'),
   getSetup: () => api('/api/admin/setup'),
   saveSetup: body => api('/api/admin/setup', { method: 'PUT', body: JSON.stringify(body) }),
+  // Sign-in and first-run setup. The setup code is never sent to the browser by the server.
+  session: () => api('/api/auth/session'),
+  login: (username, password) => api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  setup: body => api('/api/auth/setup', { method: 'POST', body: JSON.stringify(body) }),
+  logout: () => api('/api/auth/logout', { method: 'POST' }),
   // Gmail (and Outlook when the admin set up a web app): the browser goes to the provider and back.
   // Outlook otherwise uses a one-time code, so no Entra app is needed on this server.
   connect: async (provider, ui = {}) => {

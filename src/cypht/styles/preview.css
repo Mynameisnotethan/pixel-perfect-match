@@ -178,3 +178,27 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .setup-steps .is-active button { background: #0f766e; border-color: #0f766e; color: #fff; }
 .setup-steps .is-done button { border-color: #0f766e; }
 .setup-howto { padding-left: 18px; margin-bottom: 4px; }
+
+/* Sign-in and first-run setup (self-hosted web builds only; the preview and desktop app never show these) */
+.auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 28px 16px; background: var(--bs-secondary-bg); }
+.auth-card { width: 100%; max-width: 430px; padding: 30px 28px 26px; background: var(--bs-body-bg); border: 1px solid var(--preview-border); border-radius: 12px; box-shadow: 0 10px 30px #00000014; }
+.auth-logo { height: 34px; width: auto; margin-bottom: 18px; }
+.auth-card h1 { font-size: 21px; font-weight: 600; margin-bottom: 8px; }
+.auth-lead { font-size: 13px; color: var(--preview-muted); margin-bottom: 14px; }
+.auth-field { display: block; margin-bottom: 12px; }
+.auth-field > span { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.auth-field small { display: block; margin-top: 4px; font-size: 11px; color: var(--preview-muted); }
+.auth-code { letter-spacing: .12em; text-transform: uppercase; font-weight: 700; }
+.auth-submit { width: 100%; margin-top: 6px; background: #0f766e; border-color: #0f766e; color: #fff; }
+.auth-submit:hover:not(:disabled) { background: #0c5f58; border-color: #0c5f58; color: #fff; }
+.auth-error, .auth-notice { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; border-radius: 8px; padding: 9px 11px; margin-bottom: 12px; }
+.auth-error { background: var(--bs-danger-bg-subtle); color: var(--bs-danger-text-emphasis); border: 1px solid var(--bs-danger-border-subtle); }
+.auth-notice { background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); border: 1px solid #bfe0dd; }
+.auth-where { font-size: 12.5px; margin-bottom: 14px; border: 1px solid var(--preview-border); border-radius: 8px; padding: 8px 11px; background: var(--bs-tertiary-bg); }
+.auth-where summary { cursor: pointer; font-weight: 600; }
+.auth-where ol { padding-left: 18px; margin: 8px 0 6px; }
+.auth-where code { background: var(--bs-body-bg); padding: 1px 5px; border-radius: 4px; }
+.auth-foot { font-size: 11.5px; color: var(--preview-muted); margin: 14px 0 0; display: flex; gap: 7px; align-items: flex-start; }
+.auth-nowrap { white-space: nowrap; }
+.auth-loading { font-size: 13px; color: var(--preview-muted); margin: 0; }
+.banner-actions { display: flex; align-items: center; gap: 14px; }

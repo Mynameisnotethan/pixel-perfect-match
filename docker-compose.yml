@@ -1,4 +1,4 @@
-# Lockbox self-hosted stack: Caddy (HTTPS + login) -> web app + mail server.
+# Lockbox self-hosted stack: Caddy (HTTPS) -> web app + mail server.
 # Built for Hostinger Docker Manager "Compose from URL": that feature downloads ONLY this file, so
 # nothing here is built from a folder or mounted from a relative path. Every service runs from a
 # published image. Setup: docs/HOSTINGER_DEPLOY.md
@@ -6,7 +6,9 @@
 # Paste this link in Hostinger (raw file, not the GitHub page):
 #   https://raw.githubusercontent.com/Mynameisnotethan/pixel-perfect-match/main/docker-compose.yml
 #
-# Environment (Hostinger "Environment" panel): LOCKBOX_DOMAIN, LOCKBOX_LOGIN_USER, LOCKBOX_LOGIN_PASSWORD.
+# Environment (Hostinger "Environment" panel): LOCKBOX_DOMAIN only.
+# The administrator account is created in the browser after deployment, using a one-time setup code
+# that appears in the mail container's logs.
 # LOCKBOX_IMAGE_ORG / LOCKBOX_IMAGE_TAG are optional: point them at your own fork's images
 # (ghcr.io builds them from your repository) instead of the upstream ones.
 services:
@@ -15,11 +17,10 @@ services:
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
-      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:?Set LOCKBOX_DOMAIN to your domain, e.g. mail.example.com}
-      LOCKBOX_LOGIN_USER: ${LOCKBOX_LOGIN_USER:-admin}
-      LOCKBOX_LOGIN_PASSWORD: ${LOCKBOX_LOGIN_PASSWORD:?Set LOCKBOX_LOGIN_PASSWORD}
-    # Hashes the plain password at start so nobody has to generate a bcrypt hash by hand.
-    entrypoint: ["/bin/sh", "-c", "export LOCKBOX_LOGIN_HASH=$$(caddy hash-password --plaintext \"$$LOCKBOX_LOGIN_PASSWORD\") && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
+      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:?Set LOCKBOX_DOMAIN to your domain or VPS hostname, e.g. mail.example.com}
+    # Caddy needs a bare host name. Hostinger sometimes hands you the hostname with https:// or a
+    # trailing slash, so it is trimmed here instead of failing the whole deploy.
+    entrypoint: ["/bin/sh", "-c", "export LOCKBOX_DOMAIN=$$(printf %s \"$$LOCKBOX_DOMAIN\" | sed -e 's#^[a-z]*://##' -e 's#/*$$##') && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
     volumes:
       - caddy-data:/data          # HTTPS certificates
     depends_on: [web, mail]
@@ -30,8 +31,8 @@ services:
     image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-mail:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      LOCKBOX_USER_HEADER: x-lockbox-user   # set only by Caddy after login
-      LOCKBOX_LOGIN_USER: ${LOCKBOX_LOGIN_USER:-admin}
+      # Used only as the default public address; the Setup page can still override it.
+      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN}
       LOCKBOX_PUBLIC_URL: ${LOCKBOX_PUBLIC_URL:-}
       LOCKBOX_TOKEN_KEY: ${LOCKBOX_TOKEN_KEY:-}            # optional: auto-generated on the data volume
       # Optional overrides; normally every provider credential is entered in post-deploy Setup.
@@ -41,7 +42,7 @@ services:
       LOCKBOX_MS_CLIENT_ID: ${LOCKBOX_MS_CLIENT_ID:-}
       LOCKBOX_MS_CLIENT_SECRET: ${LOCKBOX_MS_CLIENT_SECRET:-}
     volumes:
-      - lockbox-data:/data        # encrypted mailbox tokens + key; survives restarts and updates
+      - lockbox-data:/data        # encrypted mailbox tokens, accounts, sessions + key; survives restarts and updates
 volumes:
   caddy-data:
   lockbox-data:

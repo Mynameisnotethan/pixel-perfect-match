@@ -1,13 +1,17 @@
-// Lockbox Docker backend: web OAuth callbacks, encrypted token storage, sync + send.
-// Client secrets and tokens stay on this server; the browser only sees mailbox metadata.
+// Lockbox Docker backend: browser sign-in, first-run setup, web OAuth callbacks,
+// encrypted token storage, sync + send.
+// Client secrets, passwords and mailbox tokens stay on this server; the browser only sees
+// mailbox metadata and a session cookie it cannot forge.
 import http from 'node:http';
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from '../connectors/oauth.mjs';
 import { mail, upsertMailbox } from '../connectors/mail.mjs';
 import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
+import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
+import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
 
 const env = process.env;
 const DATA_DIR = env.LOCKBOX_DATA_DIR || '/data';
@@ -24,21 +28,26 @@ async function loadKey() {
 const KEY = await loadKey();
 if (KEY.length !== 32) throw new Error('LOCKBOX_TOKEN_KEY must be 32 random bytes, base64-encoded');
 
-// The operator adds their public Outlook client after deployment in Setup (no secret).
-const ADMIN = env.LOCKBOX_ADMIN_USER || env.LOCKBOX_LOGIN_USER || 'owner';
+const encrypt = encryptWith.bind(null, KEY);
+const decrypt = decryptWith.bind(null, KEY);
+const auth = createAuth({ dataDir: DATA_DIR, key: KEY, env, log: m => console.log(`[lockbox] ${m}`) });
 
 // ---- encrypted, restart-safe store: { [userId]: [{ id, provider, email, status, tokens }] }
-const encrypt = obj => { const iv = randomBytes(12); const c = createCipheriv('aes-256-gcm', KEY, iv); const ct = Buffer.concat([c.update(JSON.stringify(obj)), c.final()]); return Buffer.concat([iv, c.getAuthTag(), ct]); };
-const decrypt = buf => { const d = createDecipheriv('aes-256-gcm', KEY, buf.subarray(0, 12)); d.setAuthTag(buf.subarray(12, 28)); return JSON.parse(Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString()); };
 async function load() { try { return decrypt(await readFile(STORE)); } catch (e) { if (e.code === 'ENOENT') return {}; throw e; } }
 let queue = Promise.resolve();
-const mutate = fn => (queue = queue.then(async () => { const db = await load(); const out = await fn(db); await mkdir(DATA_DIR, { recursive: true }); await writeFile(STORE + '.tmp', encrypt(db)); await rename(STORE + '.tmp', STORE); return out; }));
+const mutate = fn => (queue = queue.then(async () => { const db = await load(); const out = await fn(db); await writeAtomic(STORE, encrypt(db)); return out; }));
 
-// ---- instance settings from the first-run Setup wizard (encrypted on the volume; env vars win)
+// ---- instance settings from the Setup wizard (encrypted on the volume; env vars win)
 let config = {};
 const loadConfig = async () => { try { config = decrypt(await readFile(CONFIG)); } catch (e) { if (e.code !== 'ENOENT') throw e; } };
-const saveConfig = async next => { await mkdir(DATA_DIR, { recursive: true }); await writeFile(CONFIG + '.tmp', encrypt(next)); await rename(CONFIG + '.tmp', CONFIG); config = next; };
-const publicUrl = () => (env.LOCKBOX_PUBLIC_URL || config.publicUrl || '').replace(/\/$/, '');
+const saveConfig = async next => { await writeAtomic(CONFIG, encrypt(next)); config = next; };
+// Address this server is reached at. An explicit LOCKBOX_PUBLIC_URL wins, then whatever the Setup
+// page saved, then the deployment's LOCKBOX_DOMAIN (https + that host) as a convenience default.
+const derivedUrl = () => {
+  const host = String(env.LOCKBOX_DOMAIN || '').replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '');
+  return host ? `https://${host}` : '';
+};
+const publicUrl = () => (env.LOCKBOX_PUBLIC_URL || config.publicUrl || derivedUrl()).replace(/\/$/, '');
 const redirectFor = provider => `${publicUrl()}/oauth/${provider}/callback`;
 const webClient = provider => provider === 'google'
   ? { clientId: env.LOCKBOX_GOOGLE_CLIENT_ID || config.google?.clientId, clientSecret: env.LOCKBOX_GOOGLE_CLIENT_SECRET || config.google?.clientSecret }
@@ -48,18 +57,18 @@ const deviceClientId = () => env.LOCKBOX_MS_DEVICE_CLIENT_ID || config.microsoft
 const clientFor = box => box.via === 'device' ? { clientId: box.authClientId || deviceClientId() } : webClient(box.provider);
 const microsoftMode = () => (webClient('microsoft').clientId ? 'web' : deviceClientId() ? 'device' : 'none');
 const devices = new Map(); // handle -> { user, clientId, deviceCode, expiresAt }
-
-// ---- Lockbox user: supplied by the authenticating reverse proxy in front of this container.
-function userOf(req) {
-  const header = env.LOCKBOX_USER_HEADER; // e.g. "x-forwarded-user"
-  if (header) return req.headers[header.toLowerCase()] || null;
-  return env.LOCKBOX_SINGLE_USER ? 'owner' : null;
-}
-
 const pending = new Map(); // state -> { verifier, provider, user, at }
+
+// ---- request helpers
 const publicBox = ({ tokens, authClientId, ...b }) => b;
 const send = (res, status, body, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(body === undefined ? '' : JSON.stringify(body)); };
 const readJson = req => new Promise((ok, bad) => { let s = ''; req.on('data', c => { s += c; if (s.length > 1e6) req.destroy(); }); req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } }); });
+const cookiesOf = req => Object.fromEntries((req.headers.cookie || '').split(';').map(p => { const i = p.indexOf('='); return i < 0 ? [] : [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())]; }).filter(e => e.length));
+// Caddy ends TLS and tells us over X-Forwarded-Proto, so cookies get the Secure flag in production
+// while a plain-http test server can still set them.
+const secureCookies = req => (req.headers['x-forwarded-proto'] || '').includes('https') || /^https:\/\//.test(publicUrl());
+const cookie = (name, value, { maxAge, httpOnly = true, secure }) => [`${name}=${encodeURIComponent(value)}`, 'Path=/', `Max-Age=${maxAge}`, 'SameSite=Strict', httpOnly ? 'HttpOnly' : '', secure ? 'Secure' : ''].filter(Boolean).join('; ');
+const ipOf = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
 
 async function withToken(user, id, fn) {
   const box = (await load())[user]?.find(b => b.id === id);
@@ -75,9 +84,39 @@ async function withToken(user, id, fn) {
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const user = userOf(req);
+  const cookies = cookiesOf(req);
+  const session = auth.validate(cookies[SESSION_COOKIE]);
+  // Identity comes from the signed-in session only. A client-supplied header is never trusted.
+  const user = session?.user || null;
+  const secure = secureCookies(req);
   try {
+    // State-changing calls from a signed-in browser must echo the session's CSRF token.
+    if (session && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.headers[CSRF_COOKIE] !== session.csrf
+      && req.headers['x-lockbox-csrf'] !== session.csrf) return send(res, 403, { error: 'csrf_check_failed' });
+
     let m;
+    if (url.pathname === '/api/auth/session') {
+      if (req.method !== 'GET') return send(res, 405, { error: 'method_not_allowed' });
+      return send(res, 200, { ...auth.state(user), csrf: session?.csrf || null });
+    }
+    if (url.pathname === '/api/auth/setup' && req.method === 'POST') {
+      if (!auth.limit(ipOf(req), 'setup')) return send(res, 429, { error: 'too_many_attempts' });
+      const { user: made } = await auth.completeSetup(await readJson(req));
+      return send(res, 200, { status: 'needs-login', user: made });
+    }
+    if (url.pathname === '/api/auth/login' && req.method === 'POST') {
+      if (!auth.limit(ipOf(req), 'login')) return send(res, 429, { error: 'too_many_attempts' });
+      const { user: name, token, csrf, maxAge } = await auth.login(await readJson(req));
+      return send(res, 200, { status: 'ok', user: name, csrf }, {
+        'Set-Cookie': [cookie(SESSION_COOKIE, token, { maxAge, secure }), cookie(CSRF_COOKIE, csrf, { maxAge, httpOnly: false, secure })],
+      });
+    }
+    if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+      await auth.logout(cookies[SESSION_COOKIE]);
+      return send(res, 200, { status: 'needs-login' }, {
+        'Set-Cookie': [cookie(SESSION_COOKIE, '', { maxAge: 0, secure }), cookie(CSRF_COOKIE, '', { maxAge: 0, httpOnly: false, secure })],
+      });
+    }
     if ((m = url.pathname.match(/^\/oauth\/(google|microsoft)\/start$/))) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const provider = m[1]; const client = webClient(provider); if (!client.clientId || !publicUrl()) return send(res, 503, { error: 'provider_not_configured' });
@@ -90,6 +129,7 @@ http.createServer(async (req, res) => {
       const entry = [...pending.entries()].find(([s]) => stateMatches(s, state));
       if (entry) pending.delete(entry[0]);
       const p = entry?.[1];
+      // The browser that started the connect must be the one finishing it.
       if (!p || p.provider !== m[1] || Date.now() - p.at > 10 * 60_000 || p.user !== user || !url.searchParams.get('code')) return send(res, 302, undefined, { Location: '/?mailbox=failed' });
       const tokens = await exchangeCode(p.provider, { code: url.searchParams.get('code'), verifier: p.verifier, redirectUri: redirectFor(p.provider), ...webClient(p.provider) });
       const { email } = await mail[p.provider].profile(tokens.accessToken);
@@ -98,14 +138,14 @@ http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/admin/setup') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
-      if (user !== ADMIN) return send(res, 403, { error: 'admin_only' });
+      if (!auth.isAdmin(user)) return send(res, 403, { error: 'admin_only' });
       if (req.method === 'PUT') await saveConfig(applySetup(config, await readJson(req)));
       else if (req.method !== 'GET') return send(res, 405, { error: 'method_not_allowed' });
       return send(res, 200, setupView({ config, env, publicUrl: publicUrl(), microsoftMode: microsoftMode(), deviceAvailable: !!deviceClientId() }));
     }
     if (url.pathname === '/api/mailboxes/providers') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
-      return send(res, 200, { google: webClient('google').clientId && publicUrl() ? 'web' : 'none', microsoft: microsoftMode(), isAdmin: user === ADMIN });
+      return send(res, 200, { google: webClient('google').clientId && publicUrl() ? 'web' : 'none', microsoft: microsoftMode(), isAdmin: auth.isAdmin(user) });
     }
     if (url.pathname === '/api/mailboxes/device/start' && req.method === 'POST') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
@@ -144,7 +184,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'DELETE' && id) { await mutate(db => { db[user] = (db[user] || []).filter(b => b.id !== id); }); return send(res, 204); }
     return send(res, 405, { error: 'method_not_allowed' });
   } catch (e) {
-    console.error(`[lockbox] ${req.method} ${url.pathname}: ${e.message}`); // message only, never tokens or query strings
+    console.error(`[lockbox] ${req.method} ${url.pathname}: ${e.message}`); // message only, never passwords, tokens or query strings
     return send(res, e.status || 500, { error: e.message });
   }
-}).listen(Number(env.PORT || 3000), async () => { await loadConfig(); console.log(`[lockbox] mailbox server on :${env.PORT || 3000}`); });
+}).listen(Number(env.PORT || 3000), async () => { await loadConfig(); await auth.bootstrap(); console.log(`[lockbox] mailbox server on :${env.PORT || 3000}`); });

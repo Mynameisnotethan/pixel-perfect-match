@@ -28,4 +28,7 @@ The Lovable preview uses simulated mailbox connections. Live web mailbox connect
 
 ## Verification status
 
-The application builds and its automated tests cover the mailbox helpers, but real Google/Microsoft sign-in, a production Hostinger deployment, and the Windows installer still require testing with the owner's accounts and registrations.
+The application builds and its automated tests cover the mailbox helpers and the self-hosted sign-in flow
+(first-run setup code, single administrator, sessions, CSRF, forged-identity headers, restart persistence,
+legacy login migration). Real Google/Microsoft sign-in, a production Hostinger deployment, and the Windows
+installer still require testing with the owner's accounts and registrations.

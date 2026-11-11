@@ -5,9 +5,11 @@ Result: `https://mail.yourdomain.com` runs Lockbox with live Gmail/Outlook, upda
 **Independent ownership:** every deployer uses their own GitHub copy, VPS, domain, Google/Microsoft registrations, and encrypted storage. The upstream project provides source code only; no mailbox traffic or credentials go through the original developer. Start with [the ownership and self-hosting checklist](./SELF_HOSTING.md).
 
 ```text
-browser / desktop app ──https──> Caddy (certificate + login) ──> web  (Lockbox screens)
-                                                           └──> mail (Gmail/Outlook, encrypted tokens in a volume)
+browser / desktop app ──https──> Caddy (HTTPS certificate) ──> web  (Lockbox screens)
+                                                           └──> mail (sign-in, Gmail/Outlook, encrypted tokens in a volume)
 ```
+Signing in happens **inside the Lockbox app**, not in Caddy: the mail server issues its own session cookie,
+so no password or password hash is stored in the proxy.
 
 ## 1. Deploy on Hostinger (no command line)
 1. Buy a **Hostinger VPS** (KVM 1 or bigger) with the **Ubuntu 24.04 + Docker** template. Shared "Web Hosting" plans will not work.
@@ -23,12 +25,16 @@ browser / desktop app ──https──> Caddy (certificate + login) ──> web
    image instead of being built from the repository.
    If deploying a fork, replace `Mynameisnotethan/pixel-perfect-match` with your own owner/repository.
    Before deploying, confirm **Actions → Docker images** has succeeded and all three packages are public (section 4).
-4. In the **Environment** section add only the three values needed to start and protect the installation:
-   - `LOCKBOX_DOMAIN` = `mail.yourdomain.com`
-   - `LOCKBOX_LOGIN_USER` = your login name (this user is the admin)
-   - `LOCKBOX_LOGIN_PASSWORD` = a long password
+4. In the **Environment** section add only one value:
+   - `LOCKBOX_DOMAIN` = `mail.yourdomain.com` — a bare hostname, no `https://` and no trailing slash.
+     Hostinger's own VPS hostname works too if you have no domain yet.
 5. Click **Deploy**. HTTPS is issued automatically; the encryption key is created on the `lockbox-data` volume. **Never delete that volume** — everyone would need to reconnect.
-6. Open `https://mail.yourdomain.com` → Add mailbox → log in → **Setup**. Add **all mail-provider credentials here, after deployment**:
+6. **Create the administrator in your browser.** Open `https://mail.yourdomain.com`. Because no account exists
+   yet, Lockbox shows a one-time **Set up Lockbox** page. Copy the setup code from the mail container's logs
+   (Hostinger: Docker Manager → this project → **mail** container → **logs**; command line: `docker compose logs mail`),
+   paste it in, and choose the username and password you will use from now on. The code appears only in those
+   logs, is never sent to the browser, and stops working for good the moment an account exists.
+7. Sign in with that account → Add mailbox → **Setup**. Add **all mail-provider credentials here, after deployment**:
    - **Address:** your https address. Lockbox shows the exact provider callback URLs with Copy buttons.
    - **Gmail:** create a Google *Web application* client with that callback and paste its ID and secret.
    - **Outlook:** create your own Entra app, enable **Allow public client flows**, and paste its Application (client) ID. No secret is needed for sign-in by code. If an organization blocks codes, the optional Outlook web-app fields accept a separate ID and secret.
@@ -38,9 +44,10 @@ browser / desktop app ──https──> Caddy (certificate + login) ──> web
 ```bash
 ssh root@<vps-ip>
 git clone https://github.com/<you>/<repo>.git ~/lockbox && cd ~/lockbox
-cp .env.lockbox.example .env && nano .env      # same variables as step 4
+cp .env.lockbox.example .env && nano .env      # only LOCKBOX_DOMAIN is needed
 docker compose pull
 docker compose up -d
+docker compose logs mail                       # the one-time setup code is printed here
 ```
 
 ## 2. Automatic updates from GitHub
@@ -79,9 +86,13 @@ empty to run the upstream images, or set it to your own GitHub username so the c
 from your repository. `LOCKBOX_IMAGE_TAG` pins a tag instead of `latest`.
 
 ## Notes
-- The Lockbox login protects mailbox access; each login name gets its own mailboxes. To add people, add more
-  `name hash` lines inside `basic_auth` in `deploy/Caddyfile`, push the change (GitHub rebuilds
-  `lockbox-proxy`), then `docker compose pull && docker compose up -d` on the VPS. Hash a password with
-  `docker run --rm caddy:2-alpine caddy hash-password --plaintext 'the password'`.
+- The Lockbox login protects mailbox access; each signed-in user gets their own mailboxes. The administrator
+  is created once, in the browser, with the one-time setup code (step 6). If you are upgrading from the older
+  setup that kept `LOCKBOX_LOGIN_USER` / `LOCKBOX_LOGIN_PASSWORD` in Hostinger, the mail container keeps those
+  credentials as the administrator account on first start so existing mailboxes stay where they are; delete the
+  variables once you are in.
+- Sessions are HttpOnly cookies held by the browser and stored only as hashes on the volume; signing out ends
+  one immediately, and an idle session expires after 12 hours. Repeated wrong passwords from one address are
+  limited for a few minutes.
 - Desktop users connect mail on their own PC (tokens in Windows Credential Manager); the server never sees them.
-- Logs: `docker compose logs -f mail`.
+- Logs: `docker compose logs -f mail`. The setup code is the only secret the log ever prints.

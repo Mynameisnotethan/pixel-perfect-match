@@ -35,12 +35,14 @@ Lockbox refreshes tokens automatically. When a refresh fails permanently (`inval
 2. Under **Supported account types**, pick *Accounts in any organizational directory and personal Microsoft accounts* so both Microsoft 365 and Outlook.com work.
 3. Under **API permissions → Microsoft Graph → Delegated**, add `User.Read`, `Mail.Read`, `Mail.Send`, `offline_access`, `openid` and `email`. Tenants that block user consent need an admin to click **Grant admin consent**.
 4. Under **Authentication**:
-   - Desktop: add the **Mobile and desktop applications** platform with redirect `http://localhost`. Entra matches any loopback port. Enable **Allow public client flows**.
+   - Desktop: add the **Mobile and desktop applications** platform with custom redirect `http://127.0.0.1` (Entra ignores the port for loopback). Enable **Allow public client flows**. Do not create a client secret for this registration.
    - Docker: use a separate registration (recommended) with the **Web** platform and redirect `https://<your-public-url>/oauth/microsoft/callback`. Under **Certificates & secrets**, create a client secret.
 
 ---
 
 ## 3. Desktop app
+
+Development run (uses environment variables, loads the UI from `LOCKBOX_URL`):
 
 ```bash
 cd desktop && npm install
@@ -48,14 +50,22 @@ LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID=... LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET=... \
 LOCKBOX_MS_DESKTOP_CLIENT_ID=... LOCKBOX_URL=http://localhost:8080 npm start
 ```
 
-- OAuth runs in the main process. The system browser opens, and a one-shot listener on `127.0.0.1:<random>/callback` checks `state` and exchanges the code with the PKCE verifier.
-- Tokens are stored in the OS vault (Keychain / Windows Credential Manager / libsecret) through `keytar`, under the service name `Lockbox Mailboxes`.
-- The renderer gets `window.lockboxMailboxes` (`list`, `connect`, `sync`, `send`, `disconnect`). Tokens never reach it.
-- Google calls the desktop "client secret" a secret, but it is not confidential in installed apps. PKCE protects the flow.
+Official release / fork release. The four values below are baked into `release-config.json` inside the installer, so end users never enter anything. Only public desktop-client values go in; web-client secrets and `LOCKBOX_TOKEN_KEY` are never read.
+
+```bash
+cd desktop && npm install
+export LOCKBOX_URL=https://<published Lockbox web URL>
+export LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID=...  LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET=...
+export LOCKBOX_MS_DESKTOP_CLIENT_ID=...
+npm run dist:win     # Windows NSIS installer -> desktop/release/Lockbox Setup 0.1.0.exe
+# npm run dist:mac / npm run dist:linux on those platforms
+```
+
+Build the Windows installer on Windows (or a Windows CI runner); building it on Linux needs Wine. The window only loads `LOCKBOX_URL`, and the mailbox bridge refuses calls from any other page.
 
 ## 4. Docker-hosted
 
-Create `.env.lockbox` next to `docker-compose.yml` and never commit it:
+Copy `.env.lockbox.example` to `.env.lockbox` next to `docker-compose.yml` and fill it in. Never commit it:
 
 ```
 LOCKBOX_PUBLIC_URL=https://mail.example.com      # callbacks are derived from this
@@ -95,4 +105,5 @@ None of the steps below have been run against real accounts yet:
 - Connect a real Gmail / Workspace account and a real Outlook.com / Microsoft 365 account, on desktop and Docker.
 - Load the inbox, send a test message, restart the app or container, and confirm the mailbox is still connected.
 - Revoke access in the Google or Microsoft account settings and confirm **Reconnect required** appears.
-- Wire the Lockbox UI to `window.lockboxMailboxes` (desktop) or `/api/mailboxes` (Docker) in place of the preview demo store.
+- The UI uses live mode automatically inside the desktop app (`window.lockboxMailboxes`). The Docker web UI is not yet wired to `/api/mailboxes`; it still shows demo mode.
+- The Windows installer (`npm run dist:win`) has not been built here; only a Linux unpacked build was verified.

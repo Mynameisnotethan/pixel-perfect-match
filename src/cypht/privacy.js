@@ -98,12 +98,13 @@ export function addLabel(labels, name, color) {
   return created ? [...labels, created] : labels;
 }
 
-export function updateLabel(labels, id, patch) {
+export function updateLabel(labels, id, patch = {}) {
   return labels.map(l => {
     if (l.id !== id) return l;
-    const name = patch.name === undefined ? l.name : l.name;
-    const trimmed = patch.name === undefined ? null : patch.name.trim();
-    return { ...l, name: trimmed || name, color: patch.color === undefined ? l.color : patch.color };
+    const next = { ...l };
+    if (patch.name !== undefined && patch.name.trim()) next.name = patch.name.trim();
+    if (patch.color !== undefined) next.color = patch.color;
+    return next;
   });
 }
 

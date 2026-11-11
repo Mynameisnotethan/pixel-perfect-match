@@ -18,5 +18,7 @@ jobs:
             set -e
             cd "${{ secrets.HOSTINGER_APP_DIR || '~/lockbox' }}"
             git pull --ff-only
-            docker compose up -d --build
+            # The compose file runs published images, so an update is a pull + restart.
+            docker compose pull
+            docker compose up -d
             docker image prune -f

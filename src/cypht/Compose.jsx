@@ -25,7 +25,7 @@ function ComposeTool({ icon, label, onClick, active = false, disabled = false, c
 function ComposeDialog({ title, onClose, children, className = '' }) {
   const ref = useRef(null);
   useEffect(() => { const element = ref.current; element.showModal(); return () => { if (element.open) element.close(); }; }, []);
-  return <dialog ref={ref} className={`compose-dialog ${className}`} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }}><header><h2>{title}</h2><ComposeTool icon="x-lg" label="Close dialog" onClick={onClose} /></header><div className="compose-dialog-body">{children}</div></dialog>;
+  return <dialog ref={ref} className={`composer-dialog ${className}`} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }}><header><h2>{title}</h2><ComposeTool icon="x-lg" label="Close dialog" onClick={onClose} /></header><div className="compose-dialog-body">{children}</div></dialog>;
 }
 function fileData(file, onProgress) {
   return new Promise((resolve, reject) => {

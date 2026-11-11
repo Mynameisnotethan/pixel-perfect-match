@@ -12,7 +12,9 @@ import {
   htmlToText, isSafeLink, normalizeEmail, parseRecipients, recipient, textToHtml, validEmail,
 } from './compose-utils.js';
 
-const EMOJIS = '😀 😃 😄 😁 😆 😅 😂 🙂 🙃 😉 😊 😍 🤩 😘 😎 🤔 🤗 👍 👎 👏 🙌 🙏 💪 🎉 ✨ 🔥 ❤️ 💙 💚 💛 💜 ✅ ⭐ 📌 📎 📅 📞 ✉️ 💡 🚀 🌈 ☀️ 🌙 ☕ 🍕 🎂'.split(' ');
+const EMOJIS = [
+  ['😀', 'grinning smile happy'], ['😃', 'smiley happy'], ['😄', 'smile happy'], ['😂', 'joy laugh tears'], ['🙂', 'slight smile'], ['😉', 'wink'], ['😊', 'blush smile'], ['😍', 'heart eyes love'], ['🤩', 'star struck excited'], ['😘', 'kiss love'], ['😎', 'cool sunglasses'], ['🤔', 'thinking'], ['🤗', 'hug'], ['👍', 'thumbs up yes'], ['👎', 'thumbs down no'], ['👏', 'clap applause'], ['🙌', 'celebrate raised hands'], ['🙏', 'please thanks pray'], ['💪', 'strong muscle'], ['🎉', 'party celebration'], ['✨', 'sparkles'], ['🔥', 'fire hot'], ['❤️', 'red heart love'], ['💙', 'blue heart'], ['💚', 'green heart'], ['✅', 'check done yes'], ['⭐', 'star favorite'], ['📌', 'pin'], ['📎', 'paperclip attachment'], ['📅', 'calendar date'], ['📞', 'phone call'], ['✉️', 'email envelope'], ['💡', 'idea light'], ['🚀', 'rocket launch'], ['🌈', 'rainbow'], ['☀️', 'sun sunny'], ['🌙', 'moon night'], ['☕', 'coffee'], ['🍕', 'pizza'], ['🎂', 'birthday cake'],
+].map(([char, name]) => ({ char, name }));
 const FONTS = [{ label: 'Sans Serif', value: 'Arial, Helvetica, sans-serif' }, { label: 'Serif', value: 'Georgia, serif' }, { label: 'Monospace', value: 'monospace' }, { label: 'Verdana', value: 'Verdana, sans-serif' }];
 const SIZES = [{ label: 'Small', value: '12px' }, { label: 'Normal', value: '14px' }, { label: 'Large', value: '18px' }, { label: 'Huge', value: '24px' }];
 
@@ -96,6 +98,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
   const [sendError, setSendError] = useState('');
   const [sending, setSending] = useState(false);
   const [linkForm, setLinkForm] = useState({ text: '', url: '' });
+  const [imageForm, setImageForm] = useState({ alt: '', width: '' });
   const [linkSelection, setLinkSelection] = useState(null);
   const [scheduleDate, setScheduleDate] = useState(localInputDate(suggestedTimes()[0].date));
   const [signatureDraft, setSignatureDraft] = useState({ id: '', name: '', text: '' });
@@ -118,7 +121,13 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
       Placeholder.configure({ placeholder: 'Write your message…' }),
     ],
     content: cleanHtml(draft.bodyHtml),
-    editorProps: { attributes: { 'aria-label': 'Message body', class: 'compose-prose', role: 'textbox', 'aria-multiline': 'true' } },
+    editorProps: {
+      attributes: { 'aria-label': 'Message body', class: 'compose-prose', role: 'textbox', 'aria-multiline': 'true' },
+      handleClickOn: (_view, _pos, node) => {
+        if (node.type.name === 'image') { setImageForm({ alt: node.attrs.alt || '', width: node.attrs.width || '' }); setDialog({ type: 'image-settings' }); }
+        return false;
+      },
+    },
     onUpdate: ({ editor: instance }) => {
       const bodyHtml = cleanHtml(instance.getHTML());
       lastEditorHtml.current = bodyHtml;
@@ -265,7 +274,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
   }
   function switchPlainText() {
     const text = htmlToText(editor.getHTML()); const html = textToHtml(text);
-    editor.commands.setContent(html); update({ plainText: true, body: text, bodyHtml: html }); setDialog(null);
+    editor.commands.setContent(html); update({ plainText: true, body: text, bodyHtml: html }); setDialog(null); setMenu('');
   }
   function printDraft() {
     const popup = window.open('', '_blank', 'width=760,height=700');
@@ -278,7 +287,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
   }
   const signatures = settings.signatures || [];
   const templates = settings.templates || [];
-  const emojiList = EMOJIS.filter(emoji => !emojiSearch || emoji.includes(emojiSearch));
+  const emojiList = EMOJIS.filter(emoji => !emojiSearch || emoji.name.includes(emojiSearch.toLowerCase()) || emoji.char.includes(emojiSearch));
   const account = accounts.find(item => item.id === draft.account);
 
   return <section ref={rootRef} className={`gmail-composer ${draft.minimized ? 'is-minimized' : ''} ${draft.expanded ? 'is-expanded' : ''}`} style={{ '--composer-index': index }} aria-label={draft.subject ? `Compose: ${draft.subject}` : 'New Message'} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); addFiles(Array.from(event.dataTransfer.files)); }}>
@@ -312,7 +321,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
         <ComposeTool icon="fonts" label="Toggle formatting toolbar" active={draft.formatting} onClick={() => update({ formatting: !draft.formatting })} />
         <ComposeTool icon="paperclip" label="Attach files (25 MB total)" onClick={() => fileRef.current?.click()} />
         <ComposeTool icon="link-45deg" label="Insert link (Ctrl+K)" onClick={openLink} />
-        <div className="composer-menu-wrap"><ComposeTool icon="emoji-smile" label="Insert emoji" active={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? '' : 'emoji')} />{menu === 'emoji' && <div className="composer-dropdown emoji-picker"><input autoFocus aria-label="Search emoji" placeholder="Search emoji" value={emojiSearch} onChange={event => setEmojiSearch(event.target.value)} /><div>{emojiList.map(emoji => <button key={emoji} aria-label={`Insert ${emoji}`} onClick={() => { editor?.chain().focus().insertContent(emoji).run(); setMenu(''); }}>{emoji}</button>)}</div></div>}</div>
+        <div className="composer-menu-wrap"><ComposeTool icon="emoji-smile" label="Insert emoji" active={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? '' : 'emoji')} />{menu === 'emoji' && <div className="composer-dropdown emoji-picker"><input autoFocus aria-label="Search emoji" placeholder="Search emoji" value={emojiSearch} onChange={event => setEmojiSearch(event.target.value)} /><div>{emojiList.map(emoji => <button key={emoji.char} title={emoji.name} aria-label={`Insert ${emoji.char}`} onClick={() => { editor?.chain().focus().insertContent(emoji.char).run(); setMenu(''); }}>{emoji.char}</button>)}</div></div>}</div>
         <ComposeTool icon="google" label="Insert files using Google Drive" onClick={() => setDialog({ type: 'drive' })} />
         <ComposeTool icon="image" label="Insert photo" onClick={() => photoRef.current?.click()} />
         <ComposeTool icon="lock" label="Confidential mode" onClick={() => setDialog({ type: 'confidential' })} />
@@ -325,6 +334,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     </div>}
 
     {dialog?.type === 'link' && <ComposeDialog title="Insert link" onClose={() => setDialog(null)}><label>Text to display<input autoFocus value={linkForm.text} onChange={event => setLinkForm(form => ({ ...form, text: event.target.value }))} /></label><label>Web address<input type="url" value={linkForm.url} onChange={event => setLinkForm(form => ({ ...form, url: event.target.value }))} /></label><div className="compose-dialog-actions">{editor?.isActive('link') && <button className="text-button" onClick={() => { editor.chain().focus().extendMarkRange('link').unsetLink().run(); setDialog(null); }}>Remove link</button>}<button onClick={() => setDialog(null)}>Cancel</button><button className="dialog-primary" onClick={applyLink}>Insert link</button></div></ComposeDialog>}
+    {dialog?.type === 'image-settings' && <ComposeDialog title="Image settings" onClose={() => setDialog(null)}><label>Alternative text<input autoFocus value={imageForm.alt} placeholder="Describe this image" onChange={event => setImageForm(form => ({ ...form, alt: event.target.value }))} /></label><label>Display width in pixels<input type="number" min="20" max="1200" value={imageForm.width} placeholder="Original width" onChange={event => setImageForm(form => ({ ...form, width: event.target.value }))} /></label><div className="compose-dialog-actions"><button className="text-button" onClick={() => { editor?.chain().focus().deleteSelection().run(); setDialog(null); }}>Remove image</button><button onClick={() => setDialog(null)}>Cancel</button><button className="dialog-primary" onClick={() => { editor?.chain().focus().updateAttributes('image', { alt: imageForm.alt, width: imageForm.width ? Number(imageForm.width) : null }).run(); setDialog(null); }}>Apply</button></div></ComposeDialog>}
     {dialog?.type === 'empty-warning' && <ComposeDialog title="Send this message?" onClose={() => setDialog(null)}><p>{!dialog.draft.subject.trim() && !htmlToText(dialog.draft.bodyHtml).trim() ? 'This message has no subject and no body.' : !dialog.draft.subject.trim() ? 'This message has no subject.' : 'This message has no body.'}</p><p>You can send the demo message anyway.</p><div className="compose-dialog-actions"><button onClick={() => setDialog(null)}>Keep editing</button><button className="dialog-primary" onClick={() => finishSend(dialog.draft)}>Send anyway</button></div></ComposeDialog>}
     {dialog?.type === 'confirm-send' && <ComposeDialog title="Send demo message?" onClose={() => setDialog(null)}><p>You used the keyboard send shortcut. No real email will be delivered.</p><div className="compose-dialog-actions"><button onClick={() => setDialog(null)}>Cancel</button><button className="dialog-primary" onClick={requestSend}>Send demo</button></div></ComposeDialog>}
     {dialog?.type === 'schedule' && <ComposeDialog title="Schedule demo send" onClose={() => setDialog(null)}><p className="dialog-note">Stored in this browser and processed when Cypht is open. A real provider scheduler is not connected.</p>{suggestedTimes().map(item => <button className="schedule-choice" key={item.label} onClick={() => finishSend(dialog.draft, item.date.toISOString())}><strong>{item.label}</strong><span>{item.date.toLocaleString()}</span></button>)}<label>Pick date and time<input type="datetime-local" min={localInputDate(new Date())} value={scheduleDate} onChange={event => setScheduleDate(event.target.value)} /></label><p className="timezone-copy">Time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p><div className="compose-dialog-actions"><button onClick={() => setDialog(null)}>Cancel</button><button className="dialog-primary" disabled={!scheduleDate || new Date(scheduleDate) <= new Date()} onClick={() => finishSend(dialog.draft, new Date(scheduleDate).toISOString())}>Schedule demo send</button></div></ComposeDialog>}

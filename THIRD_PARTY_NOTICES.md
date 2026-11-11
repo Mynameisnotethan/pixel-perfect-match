@@ -10,7 +10,7 @@ Reused files:
 
 - `src/styles/upstream-core.css` is copied byte-for-byte from `modules/core/site.css`.
 - `src/styles/upstream-theme.css` derives from `modules/themes/assets/default/css/default.css`. Its relative vendor @import was removed because Bootstrap is imported from the npm package in src/main.jsx; all other source lines are retained.
-- `public/assets/logo.svg` and `logo_dark.svg` are copied unchanged from `modules/core/assets/images/`.
+- The upstream `logo.svg` / `logo_dark.svg` wordmarks are no longer shipped. The interface now shows the Lockbox mark supplied by the project owner, served from `src/assets/*.asset.json` pointers.
 - `reference/cypht-upstream-source.zip` preserves every `cypht-master/` entry from the supplied upstream snapshot.
 
 New React components, sample data, documentation, and integration styles were added for this preview. Source is provided in this package; no upstream PHP files were changed. The derived frontend is distributed under the accompanying LGPL-2.1 terms. This project is not represented as an official Cypht release.

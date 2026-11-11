@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { labelPalette } from './privacy.js';
 
-const palette = ['#16a34a', '#2563eb', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#64748b'];
+const palette = labelPalette;
 
 export default function PrivacyBar({ mode, setMode, onConfirm, onClose, onHideAll, pending, labels, label, setLabel, onAddLabel }) {
   const [adding, setAdding] = useState(false);

@@ -26,3 +26,10 @@
 
 - [x] Add auto-hide switches (subject, name, email, body, attachments) to AI Access.
 - [x] Add coloured, named labels for hidden text; AI sees "[hidden: Label]".
+
+# Label management in AI Access
+
+- [x] Add a new-label form (name + colour) to the AI Access page.
+- [x] Allow renaming, recolouring, and deleting any label, plus restoring the defaults.
+- [x] Keep the bottom-bar picker in sync and clear a deleted label from the pending selection.
+- [x] Verify create, duplicate refusal, rename, use in the AI view, delete, and restore in the browser.

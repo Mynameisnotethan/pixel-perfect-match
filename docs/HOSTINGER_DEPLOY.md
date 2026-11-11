@@ -7,26 +7,30 @@ browser / desktop app ──https──> Caddy (certificate + login) ──> web
                                                            └──> mail (Gmail/Outlook, encrypted tokens in a volume)
 ```
 
-## 1. One-time server setup
+## 1. Deploy on Hostinger (no command line)
 1. Buy a **Hostinger VPS** (KVM 1 or bigger) with the **Ubuntu 24.04 + Docker** template. Shared "Web Hosting" plans will not work.
-2. In your DNS, add an `A` record: `mail` → the VPS IP address.
-3. Connect Lovable to GitHub (Project settings → Git). On the VPS:
-   ```bash
-   ssh root@<vps-ip>
-   git clone https://github.com/<you>/<repo>.git ~/lockbox   # private repo: use a deploy key or token
-   cd ~/lockbox && cp .env.lockbox.example .env.lockbox && nano .env.lockbox
-   ```
-4. Fill in `.env.lockbox` (only these four are required):
-   - `LOCKBOX_DOMAIN`: your domain.
-   - `LOCKBOX_TOKEN_KEY`: `openssl rand -base64 32`. **Back it up** — losing it means everyone reconnects.
-   - `LOCKBOX_LOGIN_USER` and `LOCKBOX_LOGIN_HASH`: `docker run --rm caddy:2-alpine caddy hash-password --plaintext 'pick-a-password'`
-5. Start it: `docker compose up -d --build`.
-6. Open `https://mail.yourdomain.com` → Add mailbox → log in as `LOCKBOX_LOGIN_USER` (the admin) → **Setup**:
-   - **Address:** your https address. Lockbox then shows the exact Google callback URL with a Copy button.
-   - **Gmail:** create a Google *Web application* client with that callback and paste its ID and secret (once per server).
-   - **Outlook:** nothing to do. People connect with a one-time code using the publisher's Outlook client.
-     If an organization blocks sign-in by code, add your own Entra Web app here instead.
-   Settings and secrets are stored encrypted in the `lockbox-data` volume and are never sent back to the browser.
+2. In your DNS, add an `A` record: `mail` → the VPS IP address. Wait until it resolves.
+3. Hostinger panel → your VPS → **Docker Manager** → **Compose** → **From URL**, paste your GitHub repo link
+   (private repo: make it public, or use the command-line route below).
+4. In the **Environment** section add:
+   - `LOCKBOX_DOMAIN` = `mail.yourdomain.com`
+   - `LOCKBOX_LOGIN_USER` = your login name (this user is the admin)
+   - `LOCKBOX_LOGIN_PASSWORD` = a long password
+   - `LOCKBOX_MS_DEVICE_CLIENT_ID` = the public Outlook app ID (needed for Outlook sign-in by code)
+5. Click **Deploy**. HTTPS is issued automatically; the encryption key is created on the `lockbox-data` volume. **Never delete that volume** — everyone would need to reconnect.
+6. Open `https://mail.yourdomain.com` → Add mailbox → log in → **Setup**:
+   - **Address:** your https address. Lockbox shows the exact Google callback URL with a Copy button.
+   - **Gmail:** create a Google *Web application* client with that callback and paste its ID and secret.
+   - **Outlook:** nothing more to do; connect with a one-time code. If an organization blocks it, add your own Entra Web app here.
+7. Add mailbox → Connect Gmail / Connect Outlook → sign in with the mailbox owner's account.
+
+**Command-line route** (private repos, or for automatic updates below):
+```bash
+ssh root@<vps-ip>
+git clone https://github.com/<you>/<repo>.git ~/lockbox && cd ~/lockbox
+cp .env.lockbox.example .env && nano .env      # same variables as step 4
+docker compose up -d --build
+```
 
 ## 2. Automatic updates from GitHub
 In GitHub → Settings → Secrets and variables → Actions, add:
@@ -52,6 +56,6 @@ Set the repo **variable** `LOCKBOX_MS_DEVICE_CLIENT_ID` (your public Outlook cli
 Hostinger keeps building from source by default; to use the images instead, replace `build:` with `image:` in `docker-compose.yml`.
 
 ## Notes
-- The Lockbox login protects mailbox access; each login name gets its own mailboxes. To add people, add more lines inside `basic_auth` in `deploy/Caddyfile`.
+- The Lockbox login protects mailbox access; each login name gets its own mailboxes. To add people, add more `name hash` lines inside `basic_auth` in `deploy/Caddyfile` (hash with `docker run --rm caddy:2-alpine caddy hash-password`).
 - Desktop users connect mail on their own PC (tokens in Windows Credential Manager); the server never sees them.
 - Logs: `docker compose logs -f mail`.

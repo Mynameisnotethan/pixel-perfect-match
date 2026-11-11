@@ -13,7 +13,15 @@ const env = process.env;
 const DATA_DIR = env.LOCKBOX_DATA_DIR || '/data';
 const STORE = path.join(DATA_DIR, 'mailboxes.enc');
 const CONFIG = path.join(DATA_DIR, 'config.enc');
-const KEY = Buffer.from(env.LOCKBOX_TOKEN_KEY || '', 'base64');
+// Token key: env wins; otherwise one is generated once and kept on the data volume (back up the volume).
+async function loadKey() {
+  if (env.LOCKBOX_TOKEN_KEY) return Buffer.from(env.LOCKBOX_TOKEN_KEY, 'base64');
+  const f = path.join(DATA_DIR, 'token.key');
+  try { return Buffer.from((await readFile(f, 'utf8')).trim(), 'base64'); }
+  catch (e) { if (e.code !== 'ENOENT') throw e; }
+  const k = randomBytes(32); await mkdir(DATA_DIR, { recursive: true }); await writeFile(f, k.toString('base64'), { mode: 0o600 }); return k;
+}
+const KEY = await loadKey();
 if (KEY.length !== 32) throw new Error('LOCKBOX_TOKEN_KEY must be 32 random bytes, base64-encoded');
 
 // Publisher's public Outlook client for device-code sign-in (no secret). Operators never need their own.

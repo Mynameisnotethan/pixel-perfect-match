@@ -7,6 +7,6 @@
 
 # AI privacy refinements
 
-- [ ] Keep the original email readable outside lock mode and show its privacy colour in the reader toolbar.
-- [ ] Allow partial hiding of the subject, sender name, and sender email, including AI-view redaction and status calculation.
-- [ ] Verify body and header hiding, unlocking, persistence, and normal reading in the browser; run privacy tests.
+- [x] Keep the original email readable outside lock mode and show its privacy colour in the reader toolbar.
+- [x] Allow partial hiding of the subject, sender name, and sender email, including AI-view redaction and status calculation.
+- [x] Verify body and header hiding, unlocking, persistence, and normal reading in the browser; run privacy tests.

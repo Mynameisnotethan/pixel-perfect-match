@@ -148,3 +148,4 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .compose-privacy-atts{padding:10px 0}
 .compose-privacy .privacy-bar{position:sticky;bottom:10px;margin:12px auto 10px;max-width:100%;flex-wrap:wrap;justify-content:center;row-gap:8px}
 .compose-privacy .privacy-bar-actions{margin-left:0}
+.compose-privacy>.privacy-text{align-items:flex-start}.compose-privacy>.privacy-text .privacy-field-toggle{align-self:flex-start;top:10px;transform:none}

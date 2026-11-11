@@ -21,3 +21,8 @@
 
 - [x] Replace overlapping dashed outlines with organized, labelled privacy fields and grouped controls.
 - [x] Verify selection, quick hide/reveal, and the narrow-screen layout.
+
+# AI defaults and labels
+
+- [x] Add auto-hide switches (subject, name, email, body, attachments) to AI Access.
+- [x] Add coloured, named labels for hidden text; AI sees "[hidden: Label]".

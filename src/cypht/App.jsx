@@ -5,7 +5,7 @@ import PrivacyBar from './PrivacyBar.jsx';
 import LabelManager from './LabelManager.jsx';
 import { usePrivacyEditor } from './PrivacyEditor.jsx';
 import { addRanges, aiView, applyDefaults, labelFor, presetLabels, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
-import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml } from './compose-utils.js';
+import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml, htmlToText } from './compose-utils.js';
 import logoDark from '../assets/lockbox-logo-dark.png.asset.json';
 import logoLight from '../assets/lockbox-logo-light.png.asset.json';
 
@@ -158,7 +158,7 @@ export default function App() {
     try {
       const incoming = inboxToMessages(box, await bridge.sync(box.id));
       setAccounts(all => [...all.filter(a => a.id !== box.id), liveAccount(box)]);
-      setMessages(all => { const known = new Map(all.map(m => [m.id, m])); return [...incoming.filter(m => !known.has(m.id)).map(m => m), ...all.map(m => incoming.find(n => n.id === m.id) ? { ...incoming.find(n => n.id === m.id), ...m, read: m.read } : m)]; });
+      setMessages(all => { const known = new Set(all.map(m => m.id)); return [...incoming.filter(m => !known.has(m.id)), ...all]; });
       setMailboxes(list => upsertMailbox(list, { ...box, status: 'connected' })); setSourceIds(null);
     } catch (e) {
       setMailboxes(list => upsertMailbox(list, { ...box, status: e.message?.includes('reconnect_required') ? 'reconnect' : 'connected' }));

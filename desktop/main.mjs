@@ -11,10 +11,17 @@ import { mail, upsertMailbox } from '../connectors/mail.mjs';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const SERVICE = 'Lockbox Mailboxes';
 // Desktop OAuth client registrations (Google "Desktop app", Entra "Mobile and desktop").
+// Official releases bake these in at build time (release-config.json, written by scripts/write-config.mjs).
+// Environment variables override them for local development.
+import fs from 'node:fs';
+const baked = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'release-config.json'), 'utf8')); } catch { return {}; } })();
+const pick = (env, key) => process.env[env] || baked[key] || undefined;
 const clients = {
-  google: { clientId: process.env.LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID, clientSecret: process.env.LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET },
-  microsoft: { clientId: process.env.LOCKBOX_MS_DESKTOP_CLIENT_ID },
+  google: { clientId: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID', 'googleClientId'), clientSecret: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET', 'googleInstalledAppSecret') },
+  microsoft: { clientId: pick('LOCKBOX_MS_DESKTOP_CLIENT_ID', 'microsoftClientId') },
 };
+const APP_URL = pick('LOCKBOX_URL', 'appUrl') || 'http://localhost:8080';
+const appOrigin = new URL(APP_URL).origin;
 
 // The mailbox index (no tokens) is stored in the vault too, under a fixed key.
 const readIndex = async () => JSON.parse((await keytar.getPassword(SERVICE, 'index')) || '[]');
@@ -69,14 +76,18 @@ async function withToken(id, fn) {
   }
 }
 
+const guard = e => { if (new URL(e.senderFrame.url).origin !== appOrigin) throw new Error('forbidden'); };
 ipcMain.handle('mailbox:list', () => readIndex());
-ipcMain.handle('mailbox:connect', (_e, provider) => connect(provider));
-ipcMain.handle('mailbox:sync', (_e, id) => withToken(id, (t, box) => mail[box.provider].inbox(t)));
-ipcMain.handle('mailbox:send', (_e, id, msg) => withToken(id, (t, box) => mail[box.provider].send(t, box.email, msg)));
+ipcMain.handle('mailbox:connect', (e, provider) => { guard(e); return 0; } && 0 || connect(provider));
+ipcMain.handle('mailbox:sync', (e, id) => withToken(id, (t, box) => { guard(e); return 0; } && 0 || mail[box.provider].inbox(t)));
+ipcMain.handle('mailbox:send', (e, id, msg) => withToken(id, (t, box) => { guard(e); return 0; } && 0 || mail[box.provider].send(t, box.email, msg)));
 ipcMain.handle('mailbox:disconnect', async (_e, id) => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
 
 app.whenReady().then(() => {
   const win = new BrowserWindow({ width: 1280, height: 860, webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
-  win.loadURL(process.env.LOCKBOX_URL || 'http://localhost:8080');
+  // The mailbox bridge is only for the Lockbox UI: keep the window on its origin, open other links in the browser.
+  win.webContents.on('will-navigate', (e, url) => { if (new URL(url).origin !== appOrigin) { e.preventDefault(); shell.openExternal(url); } });
+  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  win.loadURL(APP_URL);
 });
 app.on('window-all-closed', () => app.quit());

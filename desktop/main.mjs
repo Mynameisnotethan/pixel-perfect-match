@@ -77,11 +77,12 @@ async function withToken(id, fn) {
 }
 
 const guard = e => { if (new URL(e.senderFrame.url).origin !== appOrigin) throw new Error('forbidden'); };
-ipcMain.handle('mailbox:list', () => readIndex());
-ipcMain.handle('mailbox:connect', (e, provider) => { guard(e); return 0; } && 0 || connect(provider));
-ipcMain.handle('mailbox:sync', (e, id) => withToken(id, (t, box) => { guard(e); return 0; } && 0 || mail[box.provider].inbox(t)));
-ipcMain.handle('mailbox:send', (e, id, msg) => withToken(id, (t, box) => { guard(e); return 0; } && 0 || mail[box.provider].send(t, box.email, msg)));
-ipcMain.handle('mailbox:disconnect', async (_e, id) => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
+const on = (channel, fn) => ipcMain.handle(channel, (e, ...args) => { guard(e); return fn(...args); });
+on('mailbox:list', () => readIndex());
+on('mailbox:connect', provider => connect(provider));
+on('mailbox:sync', id => withToken(id, (t, box) => mail[box.provider].inbox(t)));
+on('mailbox:send', (id, msg) => withToken(id, (t, box) => mail[box.provider].send(t, box.email, msg)));
+on('mailbox:disconnect', async id => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
 
 app.whenReady().then(() => {
   const win = new BrowserWindow({ width: 1280, height: 860, webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });

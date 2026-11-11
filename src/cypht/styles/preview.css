@@ -149,3 +149,21 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .compose-privacy .privacy-bar{position:sticky;bottom:10px;margin:12px auto 10px;max-width:100%;flex-wrap:wrap;justify-content:center;row-gap:8px}
 .compose-privacy .privacy-bar-actions{margin-left:0}
 .compose-privacy>.privacy-text{align-items:flex-start}.compose-privacy>.privacy-text .privacy-field-toggle{align-self:flex-start;top:10px;transform:none}
+/* Add Mailbox */
+.mailbox-connect{display:flex;flex-direction:column;gap:14px}
+.mailbox-demo-badge{display:flex;gap:8px;align-items:flex-start;background:#e2f1f0;color:#005555;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.5}
+.mailbox-providers{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.mailbox-provider{display:flex;align-items:center;gap:12px;text-align:left;padding:14px;border:1px solid var(--preview-border);border-radius:8px;background:var(--bs-body-bg);color:inherit}
+.mailbox-provider:hover{border-color:teal;background:#edf5f4}
+.mailbox-provider small,.mailbox-list small{display:block;color:var(--preview-muted);font-size:12px}
+.mailbox-provider-icon{display:inline-grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:var(--bs-tertiary-bg);font-size:16px}
+.mailbox-provider-icon.is-google{color:#d93025}.mailbox-provider-icon.is-microsoft{color:#0060d9}
+.mailbox-fake-signin{border:1px solid var(--preview-border);border-radius:8px;padding:14px}
+.mailbox-fake-signin .dialog-actions{margin-top:12px}
+.mailbox-list-title{font-size:13px;font-weight:600;margin:4px 0 0}
+.mailbox-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.mailbox-list li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--preview-border);border-radius:8px;flex-wrap:wrap}
+.mailbox-list-main{flex:1;min-width:150px;overflow-wrap:anywhere}
+.mailbox-list-actions{display:flex;gap:6px;flex-wrap:wrap}
+.mailbox-status.is-connected{color:#1e8e3e!important}.mailbox-status.is-reconnect{color:#b3261e!important}.mailbox-status.is-syncing,.mailbox-status.is-connecting{color:teal!important}
+.mailbox-connect .dialog-actions{margin-top:4px;align-items:center}

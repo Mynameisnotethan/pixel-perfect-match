@@ -1,0 +1,11 @@
+services:
+  lockbox-mail:
+    build: .
+    restart: unless-stopped
+    env_file: .env.lockbox   # see docs/MAILBOX_SETUP.md — never commit this file
+    volumes:
+      - lockbox-data:/data   # encrypted mailbox tokens; must persist across restarts
+    ports:
+      - "127.0.0.1:3000:3000"
+volumes:
+  lockbox-data:

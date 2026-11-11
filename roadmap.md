@@ -39,3 +39,11 @@
 
 - [x] Replace every Cypht logo with the supplied Lockbox mark (light + dark wordmarks).
 - [x] Set the browser-tab icon from the mark's padlock and drop the default icon.
+
+# Gmail / Outlook mailbox connection
+
+- [x] Add Mailbox screen with Connect Gmail / Connect Outlook, clearly labelled demo mode and connection states.
+- [x] Shared OAuth (PKCE, refresh, reconnect), Gmail API and Graph sync/send in `connectors/`.
+- [x] Desktop shell (loopback OAuth, OS vault) and Docker backend (HTTPS callbacks, encrypted volume store).
+- [x] Setup guide for Google Cloud, Microsoft Entra and self-hosters.
+- [ ] Live verification and wiring the UI to live connections — blocked on OAuth client registrations.

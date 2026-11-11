@@ -90,3 +90,19 @@ describe("label management", () => {
     expect(presetLabels[0].name).toBe("Financial info");
   });
 });
+
+import { remapRanges as _remap, lockStatus as _ls, aiView as _av, applyDefaults as _ad } from '../cypht/privacy.js';
+describe('outgoing email privacy', () => {
+  const sent = { id: 's1', folder: 'sent', subject: 'Hi', to: 'a@x.test', sender: 'Me', email: 'me@x.test', body: 'Card 1234', attachments: [] };
+  it('sent mail with nothing hidden is green even if not reviewed', () => { expect(_ls(sent, {})).toBe('green'); });
+  it('hiding the whole subject, recipients and body is red', () => { expect(_ls({ ...sent, hiddenSubjectRanges: [[0, 2]], hiddenToRanges: [[0, 8]], hiddenRanges: [[0, 9]] }, {})).toBe('red'); });
+  it('AI view redacts recipients with a label', () => {
+    const v = _av({ ...sent, hiddenToRanges: [[0, 8, 'personal']] }, {}, undefined);
+    expect(v.to).toBe('[hidden: Personal info]');
+    expect(v.from).toBeUndefined();
+  });
+  it('sent defaults hide the body of every sent email', () => { expect(_ad(sent, { sent: { body: true } }).hiddenRanges).toEqual([[0, 9, 'auto-body']]); });
+  it('received defaults do not apply to sent mail', () => { expect(_ad(sent, { body: true }).hiddenRanges).toBeUndefined(); });
+  it('remap shifts ranges after an earlier insert', () => { expect(_remap('Card 1234', 'My Card 1234', [[5, 9]])).toEqual([[8, 12]]); });
+  it('remap drops a range whose text was deleted', () => { expect(_remap('Card 1234 ok', 'Card ok', [[5, 9]])).toEqual([]); });
+});

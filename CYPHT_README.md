@@ -35,8 +35,9 @@ For a new GitHub repository, upload the extracted source files, including packag
 
 - Everything inbox and individual account folders, unread, flagged, drafts, sent, archive, junk, and trash.
 - Search, sort, page size, source filtering, selection, bulk actions, and restoring messages to Inbox.
-- Reading messages, toggling flags, read/unread, reply/forward composition, draft saving, and simulated sending.
-- Sample text attachment download; composing retains attachment names and sizes only.
+- Reading messages, toggling flags, read/unread, reply/forward composition, automatic draft recovery, demo Undo Send, and browser-local demo scheduling.
+- Gmail-style floating composer with multiple drafts, recipient chips, rich text, links, emoji, signatures, templates, and local inline images.
+- Attachments are stored as browser data for the demo, subject to browser storage limits and a 25 MB total composer limit.
 - Local contacts with add/edit/delete and composing to a contact.
 - Local calendar with month navigation and add/remove events.
 - Sample account configuration with add/edit/remove. No provider login is performed.

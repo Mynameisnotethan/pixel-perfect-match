@@ -9,7 +9,11 @@ function useSaved(key, initial) {
     try { const saved = localStorage.getItem(STORE + key); return saved ? JSON.parse(saved) : typeof initial === 'function' ? initial() : initial; }
     catch { return typeof initial === 'function' ? initial() : initial; }
   });
-  useEffect(() => { try { localStorage.setItem(STORE + key, JSON.stringify(value)); } catch { /* Preview also works without browser storage. */ } }, [key, value]);
+  const [storageError, setStorageError] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem(STORE + key, JSON.stringify(value)); setStorageError(false); }
+    catch { setStorageError(true); }
+  }, [key, value]);
   useEffect(() => {
     const sync = event => {
       if (event.key !== STORE + key || !event.newValue) return;
@@ -18,7 +22,7 @@ function useSaved(key, initial) {
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
   }, [key]);
-  return [value, setValue];
+  return [value, setValue, storageError];
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
@@ -36,7 +40,7 @@ const titles = { everything: 'Everything', unread: 'Unread', flagged: 'Flagged',
 
 export default function App() {
   const [accounts, setAccounts] = useSaved('accounts', initialAccounts);
-  const [messages, setMessages] = useSaved('messages', seedMessages);
+  const [messages, setMessages, messagesStorageError] = useSaved('messages', seedMessages);
   const [contacts, setContacts] = useSaved('contacts', initialContacts);
   const [settings, setSettings] = useSaved('settings', initialSettings);
   const [events, setEvents] = useSaved('events', []);
@@ -47,7 +51,7 @@ export default function App() {
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null);
-  const [drafts, setDrafts] = useSaved('open-drafts', []);
+  const [drafts, setDrafts, draftsStorageError] = useSaved('open-drafts', []);
   const [pendingSends, setPendingSends] = useSaved('pending-sends', []);
   const [composeSettings, setComposeSettings] = useSaved('compose-settings', { undoSeconds: 5, defaultExpanded: false, confirmKeyboardSend: true, signatures: [], templates: [] });
   const [undoSend, setUndoSend] = useState(null);
@@ -72,13 +76,13 @@ export default function App() {
     const timer = setTimeout(() => {
       try {
         saveNow(drafts);
-        setDrafts(all => all.map(item => ({ ...item, saveState: 'saved' })));
+        setDrafts(all => all.map(item => ({ ...item, saveState: draftsStorageError || messagesStorageError ? 'error' : 'saved' })));
       } catch {
         setDrafts(all => all.map(item => ({ ...item, saveState: 'error' })));
       }
     }, 650);
     return () => clearTimeout(timer);
-  }, [draftSnapshot]);
+  }, [draftSnapshot, draftsStorageError, messagesStorageError]);
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -150,13 +154,17 @@ export default function App() {
     const messagesToSave = list.filter(Boolean).map(item => draftMessage(normalizeDraft(item, item.account), accountFor(item.account), 'drafts'));
     if (messagesToSave.length) setMessages(all => [...messagesToSave, ...all.filter(message => !messagesToSave.some(item => item.id === message.id))]);
   }
-  function closeDraft(draft) { saveNow([draft]); setDrafts(all => all.filter(item => item.id !== draft.id)); notify('Draft saved in this browser.'); }
+  function closeDraft(draft) {
+    if (draftsStorageError || messagesStorageError) { notify('Browser storage is full. Remove large attachments before closing this draft.'); return; }
+    saveNow([draft]); setDrafts(all => all.filter(item => item.id !== draft.id)); notify('Draft saved in this browser.');
+  }
   function discardDraft(draft) {
     setMessages(all => all.filter(item => item.id !== draft.id));
     setDrafts(all => all.filter(item => item.id !== draft.id));
     setDiscarded(draft); notify('Draft discarded. You can undo this.');
   }
   async function sendDraft(draft, scheduledAt = null) {
+    if (draftsStorageError || messagesStorageError) throw new Error('Browser storage is full. Your draft is preserved; remove large attachments and try again.');
     if (composeSettings.failNextSend) {
       setComposeSettings(settings => ({ ...settings, failNextSend: false }));
       throw new Error('Simulated demo failure. Your complete draft is preserved; try Send again.');

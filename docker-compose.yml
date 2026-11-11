@@ -6,7 +6,7 @@
 # Paste this link in Hostinger (raw file, not the GitHub page):
 #   https://raw.githubusercontent.com/Mynameisnotethan/pixel-perfect-match/main/docker-compose.yml
 #
-# Environment (Hostinger "Environment" panel): LOCKBOX_DOMAIN only.
+# Defaults to srv1790211.hstgr.cloud. Set LOCKBOX_DOMAIN in Hostinger's Environment panel to use a different hostname.
 # The administrator account is created in the browser after deployment, using a one-time setup code
 # that appears in the mail container's logs.
 # LOCKBOX_IMAGE_ORG / LOCKBOX_IMAGE_TAG are optional: point them at your own fork's images
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
-      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:?Set LOCKBOX_DOMAIN to your domain or VPS hostname, e.g. mail.example.com}
+      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}
     # Caddy needs a bare host name. Hostinger sometimes hands you the hostname with https:// or a
     # trailing slash, so it is trimmed here instead of failing the whole deploy.
     entrypoint: ["/bin/sh", "-c", "export LOCKBOX_DOMAIN=$$(printf %s \"$$LOCKBOX_DOMAIN\" | sed -e 's#^[a-z]*://##' -e 's#/*$$##') && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
     environment:
       # Used only as the default public address; the Setup page can still override it.
-      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN}
+      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}
       LOCKBOX_PUBLIC_URL: ${LOCKBOX_PUBLIC_URL:-}
       LOCKBOX_TOKEN_KEY: ${LOCKBOX_TOKEN_KEY:-}            # optional: auto-generated on the data volume
       # Optional overrides; normally every provider credential is entered in post-deploy Setup.

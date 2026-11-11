@@ -1,0 +1,8 @@
+node_modules
+.git
+.output
+dist
+desktop/release
+desktop/node_modules
+reference
+.env.lockbox

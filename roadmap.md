@@ -48,3 +48,4 @@
 - [x] Setup guide for Google Cloud, Microsoft Entra and self-hosters.
 - [ ] Live verification and wiring the UI to live connections — blocked on OAuth client registrations.
 - [ ] Build Windows installer on Windows and run live Gmail/Outlook acceptance test (needs your Google + Microsoft registrations)
+- [ ] First Hostinger deploy + GitHub secrets (needs your VPS, domain, and provider registrations)

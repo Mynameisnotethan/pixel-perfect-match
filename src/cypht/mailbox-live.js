@@ -2,7 +2,26 @@
 // Without it, the preview falls back to demo mode.
 import { MAILBOX_PROVIDERS } from './mailbox-demo.js';
 
-export const liveBridge = () => (typeof window !== 'undefined' && window.lockboxMailboxes) || null;
+// Self-hosted web builds (VITE_LOCKBOX_MAIL_API=1) talk to the Lockbox mail server on the same domain.
+async function api(path, init) {
+  const res = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `Request failed (${res.status})`); }
+  return res.status === 204 ? null : res.json();
+}
+const webBridge = {
+  runtime: 'web',
+  list: () => api('/api/mailboxes'),
+  // The browser goes to Google/Microsoft and comes back to Lockbox; the server stores the tokens.
+  connect: provider => { window.location.assign(`/oauth/${provider}/start`); return new Promise(() => {}); },
+  sync: id => api(`/api/mailboxes/${encodeURIComponent(id)}/inbox`),
+  send: (id, msg) => api(`/api/mailboxes/${encodeURIComponent(id)}/send`, { method: 'POST', body: JSON.stringify(msg) }),
+  disconnect: id => api(`/api/mailboxes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
+export const liveBridge = () => {
+  if (typeof window === 'undefined') return null;
+  if (window.lockboxMailboxes) return window.lockboxMailboxes;
+  return import.meta.env?.VITE_LOCKBOX_MAIL_API === '1' ? webBridge : null;
+};
 
 /** Splits "Name <a@b.c>" into its parts. */
 export function parseFrom(from = '') {

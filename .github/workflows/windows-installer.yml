@@ -1,0 +1,28 @@
+# Builds the Windows installer. Run it from the Actions tab, or push a tag like v0.1.0 to publish a Release.
+# Repo secrets: LOCKBOX_URL, LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID, LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET, LOCKBOX_MS_DESKTOP_CLIENT_ID
+name: Windows installer
+on:
+  workflow_dispatch:
+  push: { tags: ["v*"] }
+permissions: { contents: write }
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm run dist:win
+        env:
+          LOCKBOX_URL: ${{ secrets.LOCKBOX_URL }}
+          LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID }}
+          LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          LOCKBOX_MS_DESKTOP_CLIENT_ID: ${{ secrets.LOCKBOX_MS_DESKTOP_CLIENT_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with: { name: Lockbox-Windows-installer, path: desktop/release/*.exe }
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with: { files: desktop/release/*.exe }

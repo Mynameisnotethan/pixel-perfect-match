@@ -105,5 +105,5 @@ None of the steps below have been run against real accounts yet:
 - Connect a real Gmail / Workspace account and a real Outlook.com / Microsoft 365 account, on desktop and Docker.
 - Load the inbox, send a test message, restart the app or container, and confirm the mailbox is still connected.
 - Revoke access in the Google or Microsoft account settings and confirm **Reconnect required** appears.
-- The UI uses live mode automatically inside the desktop app (`window.lockboxMailboxes`). The Docker web UI is not yet wired to `/api/mailboxes`; it still shows demo mode.
+- The UI uses live mode automatically inside the desktop app (`window.lockboxMailboxes`). Self-hosted web builds (`VITE_LOCKBOX_MAIL_API=1`, set in `Dockerfile.web`) use `/api/mailboxes`. See `docs/HOSTINGER_DEPLOY.md`.
 - The Windows installer (`npm run dist:win`) has not been built here; only a Linux unpacked build was verified.

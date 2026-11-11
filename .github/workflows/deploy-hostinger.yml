@@ -1,0 +1,22 @@
+# Every push to main updates the Hostinger VPS.
+# Repo secrets: HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY  (optional: HOSTINGER_APP_DIR)
+name: Deploy to Hostinger
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+concurrency: deploy-hostinger
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.HOSTINGER_APP_DIR || '~/lockbox' }}"
+            git pull --ff-only
+            docker compose up -d --build
+            docker image prune -f

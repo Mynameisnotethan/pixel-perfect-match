@@ -13,6 +13,7 @@ jobs:
         include:
           - { name: lockbox-mail, file: Dockerfile }
           - { name: lockbox-web, file: Dockerfile.web }
+          - { name: lockbox-proxy, file: Dockerfile.proxy }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3

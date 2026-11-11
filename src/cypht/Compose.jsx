@@ -88,7 +88,7 @@ function RecipientField({ field, label, items, contacts, value, onInput, onChang
 export default function Compose({ draft, accounts, contacts, settings, onSettings, onChange, onClose, onDiscard, onSend, onPopout, index }) {
   const draftRef = useRef(draft);
   const changeRef = useRef(onChange);
-  const [inputs, setInputs] = useState({ to: '', cc: '', bcc: '' });
+  const [inputs, setInputs] = useState({ to: draft.recipientInputs?.to || '', cc: draft.recipientInputs?.cc || '', bcc: draft.recipientInputs?.bcc || '' });
   const [recipientFields, setRecipientFields] = useState(!!(draft.recipients.cc.length || draft.recipients.bcc.length));
   const [dialog, setDialog] = useState(null);
   const [menu, setMenu] = useState('');
@@ -104,6 +104,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
   const photoRef = useRef(null);
   const fileCache = useRef(new Map());
   const sendingRef = useRef(false);
+  const lastEditorHtml = useRef(cleanHtml(draft.bodyHtml));
   const rootRef = useRef(null);
   draftRef.current = draft;
   changeRef.current = onChange;
@@ -120,10 +121,17 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     editorProps: { attributes: { 'aria-label': 'Message body', class: 'compose-prose', role: 'textbox', 'aria-multiline': 'true' } },
     onUpdate: ({ editor: instance }) => {
       const bodyHtml = cleanHtml(instance.getHTML());
+      lastEditorHtml.current = bodyHtml;
       update({ bodyHtml, body: htmlToText(bodyHtml) });
     },
   });
 
+  useEffect(() => {
+    if (editor && draft.bodyHtml !== lastEditorHtml.current && cleanHtml(editor.getHTML()) !== cleanHtml(draft.bodyHtml)) {
+      lastEditorHtml.current = cleanHtml(draft.bodyHtml);
+      editor.commands.setContent(lastEditorHtml.current, { emitUpdate: false });
+    }
+  }, [editor, draft.bodyHtml]);
   function update(patch) {
     const next = { ...draftRef.current, ...patch, updatedAt: new Date().toISOString() };
     draftRef.current = next;
@@ -147,7 +155,10 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     return () => element?.removeEventListener('keydown', onKey);
   }, [editor, dialog, menu, settings.confirmKeyboardSend]);
 
-  function setInput(field, value) { setInputs(all => ({ ...all, [field]: value })); }
+  function setInput(field, value) {
+    setInputs(all => ({ ...all, [field]: value }));
+    update({ recipientInputs: { ...draftRef.current.recipientInputs, [field]: value } });
+  }
   function collectRecipients() {
     let recipients = Object.fromEntries(['to', 'cc', 'bcc'].map(field => [field, [...draftRef.current.recipients[field]]]));
     for (const field of ['to', 'cc', 'bcc']) {
@@ -161,7 +172,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
     if (duplicates.length) { setSendError(`Remove duplicate recipients: ${duplicates.join(', ')}`); return null; }
     if (!recipients.to.length && !recipients.cc.length && !recipients.bcc.length) { setSendError('Add at least one recipient.'); return null; }
     setInputs({ to: '', cc: '', bcc: '' });
-    const next = { ...draftRef.current, recipients };
+    const next = { ...draftRef.current, recipients, recipientInputs: { to: '', cc: '', bcc: '' } };
     draftRef.current = next;
     changeRef.current(next);
     return next;
@@ -306,7 +317,7 @@ export default function Compose({ draft, accounts, contacts, settings, onSetting
         <ComposeTool icon="image" label="Insert photo" onClick={() => photoRef.current?.click()} />
         <ComposeTool icon="lock" label="Confidential mode" onClick={() => setDialog({ type: 'confidential' })} />
         <ComposeTool icon="pen" label="Insert signature" onClick={() => setDialog({ type: 'signature' })} />
-        <div className="composer-menu-wrap"><ComposeTool icon="three-dots-vertical" label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? '' : 'more')} />{menu === 'more' && <div className="composer-dropdown more-dropdown"><button onClick={() => { if (draft.plainText) { update({ plainText: false }); setMenu(''); } else setDialog({ type: 'plain-text' }); }}><Icon name="file-text" /> {draft.plainText ? 'Rich text mode' : 'Plain text mode'}</button><button onClick={printDraft}><Icon name="printer" /> Print</button><button onClick={() => { setDialog({ type: 'templates' }); setMenu(''); }}><Icon name="layout-text-window" /> Templates</button><button onClick={() => { onSettings({ ...settings, defaultExpanded: !settings.defaultExpanded }); setMenu(''); }}><Icon name="arrows-fullscreen" /> {settings.defaultExpanded ? '✓ ' : ''}Default to expanded</button><label className="undo-setting">Undo Send<select value={settings.undoSeconds} onChange={event => onSettings({ ...settings, undoSeconds: Number(event.target.value) })}>{[5, 10, 20, 30].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label></div>}</div>
+        <div className="composer-menu-wrap"><ComposeTool icon="three-dots-vertical" label="More options" active={menu === 'more'} onClick={() => setMenu(menu === 'more' ? '' : 'more')} />{menu === 'more' && <div className="composer-dropdown more-dropdown"><button onClick={() => { if (draft.plainText) { update({ plainText: false }); setMenu(''); } else setDialog({ type: 'plain-text' }); }}><Icon name="file-text" /> {draft.plainText ? 'Rich text mode' : 'Plain text mode'}</button><button onClick={printDraft}><Icon name="printer" /> Print</button><button onClick={() => { setDialog({ type: 'templates' }); setMenu(''); }}><Icon name="layout-text-window" /> Templates</button><button onClick={() => { onSettings({ ...settings, defaultExpanded: !settings.defaultExpanded }); setMenu(''); }}><Icon name="arrows-fullscreen" /> {settings.defaultExpanded ? '✓ ' : ''}Default to expanded</button><button onClick={() => { onSettings({ ...settings, failNextSend: !settings.failNextSend }); setMenu(''); }}><Icon name="exclamation-triangle" /> {settings.failNextSend ? '✓ ' : ''}Fail next demo send</button><label className="undo-setting">Undo Send<select value={settings.undoSeconds} onChange={event => onSettings({ ...settings, undoSeconds: Number(event.target.value) })}>{[5, 10, 20, 30].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></label></div>}</div>
         <ComposeTool icon="trash" label="Discard draft" className="discard-button" onClick={() => setDialog({ type: 'discard' })} />
       </footer>
       <input ref={fileRef} type="file" multiple hidden onChange={event => addFiles(Array.from(event.target.files || []))} /><input ref={photoRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={event => addFiles(Array.from(event.target.files || []), true)} />

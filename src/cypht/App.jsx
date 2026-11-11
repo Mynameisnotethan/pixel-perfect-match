@@ -60,9 +60,10 @@ export default function App() {
   const [sourceIds, setSourceIds] = useState(null);
   const [contactSearch, setContactSearch] = useState('');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [popupDraftId] = useState(() => new URLSearchParams(window.location.search).get('compose'));
 
   useEffect(() => { document.documentElement.dataset.bsTheme = settings.theme === 'darkly' ? 'dark' : 'light'; }, [settings.theme]);
-  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4000); return () => clearTimeout(id); }, [toast]);
+  useEffect(() => { if (!toast || undoSend || discarded) return; const id = setTimeout(() => setToast(''), 4000); return () => clearTimeout(id); }, [toast, undoSend, discarded]);
   useEffect(() => { setPage(1); setSelected([]); }, [view, query, sourceIds]);
   useEffect(() => { const onKey = e => { if (e.key === 'Escape') { setCurrent(null); setSidebar(false); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
   const draftSnapshot = JSON.stringify(drafts.map(({ saveState, ...draft }) => draft));
@@ -156,6 +157,10 @@ export default function App() {
     setDiscarded(draft); notify('Draft discarded. You can undo this.');
   }
   async function sendDraft(draft, scheduledAt = null) {
+    if (composeSettings.failNextSend) {
+      setComposeSettings(settings => ({ ...settings, failNextSend: false }));
+      throw new Error('Simulated demo failure. Your complete draft is preserved; try Send again.');
+    }
     const id = draft.id;
     if (pendingSends.some(item => item.message.id === id) || messages.some(item => item.id === id && ['sent', 'scheduled'].includes(item.folder))) throw new Error('This message is already queued. Duplicate sending was prevented.');
     const account = accountFor(draft.account);
@@ -268,7 +273,7 @@ export default function App() {
       </main>
     </div>
 
-    <div className="composer-stack" aria-label="Open composers">{drafts.map((item, index) => <Compose key={item.id} draft={item} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
+    <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
 
     {modal?.type === 'account' && <AccountDialog account={modal.account} onClose={() => setModal(null)} onSave={account => { setAccounts(all => modal.account ? all.map(a => a.id === account.id ? account : a) : [...all, account]); setSourceIds(null); setModal(null); notify('Sample account saved. No server connection was made.'); }} />}
     {modal?.type === 'contact' && <ContactDialog contact={modal.contact} onClose={() => setModal(null)} onSave={contact => { setContacts(all => modal.contact ? all.map(c => c.id === contact.id ? contact : c) : [...all, contact]); setModal(null); notify('Contact saved in this browser.'); }} />}

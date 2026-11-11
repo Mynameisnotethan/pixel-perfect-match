@@ -1,5 +1,5 @@
 export const isReceived = m => !['sent', 'drafts', 'scheduled'].includes(m.folder);
-export const isOutgoing = m => ['sent', 'scheduled', 'drafts'].includes(m.folder) || m.folder === undefined;
+export const isOutgoing = m => ['sent', 'scheduled'].includes(m.folder);
 
 export function mergeRanges(ranges) {
   const sorted = (ranges || []).filter(r => r[1] > r[0]).map(r => [...r]).sort((a, b) => a[0] - b[0]);

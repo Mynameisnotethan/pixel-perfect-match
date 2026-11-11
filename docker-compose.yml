@@ -1,9 +1,17 @@
 # Lockbox self-hosted stack: Caddy (HTTPS + login) -> web app + mail server.
-# Works with Hostinger Docker Manager "Compose from URL": set the variables in its Environment panel
-# (or in a .env file next to this one). Setup: docs/HOSTINGER_DEPLOY.md
+# Built for Hostinger Docker Manager "Compose from URL": that feature downloads ONLY this file, so
+# nothing here is built from a folder or mounted from a relative path. Every service runs from a
+# published image. Setup: docs/HOSTINGER_DEPLOY.md
+#
+# Paste this link in Hostinger (raw file, not the GitHub page):
+#   https://raw.githubusercontent.com/<your-username>/<your-repo>/main/docker-compose.yml
+#
+# Environment (Hostinger "Environment" panel): LOCKBOX_DOMAIN, LOCKBOX_LOGIN_USER, LOCKBOX_LOGIN_PASSWORD.
+# LOCKBOX_IMAGE_ORG / LOCKBOX_IMAGE_TAG are optional: point them at your own fork's images
+# (ghcr.io builds them from your repository) instead of the upstream ones.
 services:
   caddy:
-    image: caddy:2-alpine
+    image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-proxy:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
@@ -13,14 +21,13 @@ services:
     # Hashes the plain password at start so nobody has to generate a bcrypt hash by hand.
     entrypoint: ["/bin/sh", "-c", "export LOCKBOX_LOGIN_HASH=$$(caddy hash-password --plaintext \"$$LOCKBOX_LOGIN_PASSWORD\") && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data          # HTTPS certificates
     depends_on: [web, mail]
   web:
-    build: { context: ., dockerfile: Dockerfile.web }
+    image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-web:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
   mail:
-    build: .
+    image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-mail:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       LOCKBOX_USER_HEADER: x-lockbox-user   # set only by Caddy after login

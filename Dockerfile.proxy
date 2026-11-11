@@ -1,0 +1,5 @@
+# Lockbox HTTPS front end: Caddy with the login + routing config baked in.
+# Baking the Caddyfile into the image is what lets docker-compose.yml be deployed from a bare URL,
+# because that deploy mode has no repository folder to mount files from.
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile

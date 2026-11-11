@@ -1,11 +1,26 @@
+# Lockbox self-hosted stack: Caddy (HTTPS + login) -> web app + mail server.
+# Setup: docs/HOSTINGER_DEPLOY.md
 services:
-  lockbox-mail:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    env_file: .env.lockbox
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # HTTPS certificates
+    depends_on: [web, mail]
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    restart: unless-stopped
+  mail:
     build: .
     restart: unless-stopped
-    env_file: .env.lockbox   # see docs/MAILBOX_SETUP.md — never commit this file
+    env_file: .env.lockbox        # never commit this file
+    environment:
+      LOCKBOX_USER_HEADER: x-lockbox-user   # set only by Caddy after login
     volumes:
-      - lockbox-data:/data   # encrypted mailbox tokens; must persist across restarts
-    ports:
-      - "127.0.0.1:3000:3000"
+      - lockbox-data:/data        # encrypted mailbox tokens; survives restarts and updates
 volumes:
+  caddy-data:
   lockbox-data:

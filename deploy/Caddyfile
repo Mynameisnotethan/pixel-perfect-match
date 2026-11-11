@@ -1,0 +1,17 @@
+# Caddy gets the HTTPS certificate automatically and asks for a Lockbox login.
+{$LOCKBOX_DOMAIN} {
+	encode gzip
+	basic_auth {
+		{$LOCKBOX_LOGIN_USER} {$LOCKBOX_LOGIN_HASH}
+	}
+	@mail path /oauth/* /api/mailboxes /api/mailboxes/*
+	handle @mail {
+		reverse_proxy mail:3000 {
+			# Overwrites anything the browser sent, so users cannot pretend to be someone else.
+			header_up X-Lockbox-User {http.auth.user.id}
+		}
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

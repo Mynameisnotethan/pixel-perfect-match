@@ -167,6 +167,8 @@ export default function App() {
   }
   useEffect(() => {
     const bridge = liveBridge(); if (!bridge) return;
+    const result = new URLSearchParams(window.location.search).get('mailbox');
+    if (result) { notify(result === 'connected' ? 'Mailbox connected. Syncing your inbox…' : 'Mailbox sign-in did not finish. Please try again.'); window.history.replaceState(null, '', window.location.pathname); }
     bridge.list().then(list => list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box))).catch(() => {});
   }, []);
   async function connectMailbox(provider, email) {

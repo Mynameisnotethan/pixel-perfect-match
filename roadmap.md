@@ -13,6 +13,6 @@
 
 # Quick privacy controls
 
-- [ ] Add a one-tap hide/reveal lock to each selectable subject, sender, email, and body field.
-- [ ] Add Hide all to the privacy bar while retaining range selection and attachment controls.
-- [ ] Remove the privacy-bar hint and privacy confirmation notifications; verify quick controls and existing selection flows.
+- [x] Add a one-tap hide/reveal lock to each selectable subject, sender, email, and body field.
+- [x] Add Hide all to the privacy bar while retaining range selection and attachment controls.
+- [x] Remove the privacy-bar hint and privacy confirmation notifications; verify quick controls and existing selection flows.

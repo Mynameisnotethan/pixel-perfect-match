@@ -4,7 +4,7 @@
 # published image. Setup: docs/HOSTINGER_DEPLOY.md
 #
 # Paste this link in Hostinger (raw file, not the GitHub page):
-#   https://raw.githubusercontent.com/<your-username>/<your-repo>/main/docker-compose.yml
+#   https://raw.githubusercontent.com/Mynameisnotethan/pixel-perfect-match/main/docker-compose.yml
 #
 # Environment (Hostinger "Environment" panel): LOCKBOX_DOMAIN, LOCKBOX_LOGIN_USER, LOCKBOX_LOGIN_PASSWORD.
 # LOCKBOX_IMAGE_ORG / LOCKBOX_IMAGE_TAG are optional: point them at your own fork's images

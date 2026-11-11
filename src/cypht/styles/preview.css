@@ -28,6 +28,7 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .privacy-mode { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 78px; height: 32px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--preview-muted); font-size: 12px; }
 .privacy-mode.is-on { background: var(--bs-body-bg); color: var(--bs-primary-text-emphasis); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
 .privacy-bar-actions { display: flex; align-items: center; gap: 6px; }
+.privacy-bar .btn:disabled { opacity: .45; }
 .privacy-hint { font-size: .8rem; opacity: .75; }
 .privacy-text { position: relative; white-space: pre-wrap; }
 .privacy-text-content { min-width: 0; overflow-wrap: anywhere; }

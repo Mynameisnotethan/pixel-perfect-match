@@ -266,3 +266,11 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .mailbox-status.is-error{color:#b02a37}
 .ai-endpoint { margin: .75rem 0; display: grid; gap: .4rem; }
 .ai-endpoint code { word-break: break-all; }
+
+/* Hide-by-default lock */
+.ai-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.ai-save-row{display:flex;gap:8px;justify-content:flex-end}.ai-columns.is-locked{opacity:.6}
+.lock-confirm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:16px}.lock-confirm{background:var(--bs-body-bg);color:var(--bs-body-color);border-radius:10px;padding:20px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:10px}.lock-confirm h3{font-size:18px;margin:0}.lock-confirm h3 .bi{color:#d97706}.lock-confirm p{margin:0;color:var(--preview-muted)}
+
+/* One scroll bar style everywhere */
+*{scrollbar-width:thin!important;scrollbar-color:#80b6b6 transparent!important}
+*::-webkit-scrollbar{width:8px!important;height:8px!important}*::-webkit-scrollbar-track{background:transparent!important}*::-webkit-scrollbar-thumb{background:#80b6b6!important;border-radius:8px!important}*::-webkit-scrollbar-thumb:hover{background:teal!important}

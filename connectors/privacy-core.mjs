@@ -235,3 +235,9 @@ export function aiView(raw, defaults, labels) {
     attachments: (m.attachments || []).map((a, i) => hidden.includes(i) ? { name: tag(m.hiddenAttachmentLabels?.[i], labels), hidden: true } : { name: a.name }),
   };
 }
+
+/** New people start with everything hidden from AI. */
+export const fullDefaults = Object.freeze({ subject: true, sender: true, email: true, body: true, attachments: true, sent: Object.freeze({ subject: true, to: true, body: true, attachments: true }) });
+export const freshDefaults = () => ({ ...fullDefaults, sent: { ...fullDefaults.sent } });
+/** Changing hide-by-default settings requires typing exactly "Lock". */
+export const confirmsLock = text => text === 'Lock';

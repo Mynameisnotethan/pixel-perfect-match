@@ -7,6 +7,7 @@ describe("real mail mode", () => {
     vi.resetModules();
     localStorage.clear();
     (window as any).lockboxMailboxes = { runtime: "desktop", list: async () => [], providers: async () => ({}) };
+    // @ts-expect-error App.jsx is plain JavaScript
     const { default: App } = await import("../cypht/App.jsx");
     render(<App />);
     expect(screen.queryByText("Sarah Chen")).toBeNull();

@@ -11,6 +11,8 @@ import { mail, upsertMailbox } from './connectors/mail.mjs';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { createImapClient, normalizeImap } from './connectors/imap.mjs';
+import { createKeyStore } from './connectors/keystore.mjs';
+import { createAiRoutes, buildFeed, cleanPrivacy } from './connectors/ai-feed.mjs';
 // The desktop runs on the user's own computer, so home-network mail servers are allowed.
 const imap = createImapClient({ ImapFlow, nodemailer, allowPrivate: true });
 
@@ -106,7 +108,43 @@ on('mailbox:imapSave', async body => {
 });
 on('mailbox:disconnect', async id => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
 
+// ---- AI agents on this computer. Keys (fingerprints only) and hide-from-AI rules live in the OS vault.
+const LOCAL_USER = 'local';
+const vaultJson = (name, fallback) => ({
+  read: async () => JSON.parse((await keytar.getPassword(SERVICE, name)) || fallback),
+  write: v => keytar.setPassword(SERVICE, name, JSON.stringify(v)),
+});
+const aiKeys = createKeyStore(vaultJson('aikeys', '{}'));
+const privacyVault = vaultJson('privacy', 'null');
+const AI_PORT = Number(process.env.LOCKBOX_AI_PORT || 47615);
+const aiEndpoint = `http://127.0.0.1:${AI_PORT}/api/ai/v1`;
+on('aiKeys:list', () => aiKeys.list(LOCAL_USER));
+on('aiKeys:create', name => aiKeys.create(LOCAL_USER, name));
+on('aiKeys:remove', id => aiKeys.remove(LOCAL_USER, id));
+on('privacy:get', () => privacyVault.read());
+on('privacy:put', body => privacyVault.write(cleanPrivacy(body)));
+on('ai:endpoint', () => aiEndpoint);
+const aiRoutes = createAiRoutes({
+  verifyKey: key => aiKeys.verify(key),
+  feedFor: async (_user, { mailbox }) => buildFeed({
+    boxes: await readIndex(), mailbox, privacy: await privacyVault.read(),
+    fetchInbox: box => withToken(box.id, (t, b, s) => b.provider === 'imap' ? imap.inbox(s) : mail[b.provider].inbox(t)),
+  }),
+});
+// Loopback only: other computers on the network cannot reach it. Browsers are refused (no CORS, Origin checked).
+function startAiServer() {
+  const server = http.createServer(async (req, res) => {
+    try {
+      if (req.headers.origin) { res.writeHead(403).end(); return; }
+      if (!(await aiRoutes(req, res, new URL(req.url, 'http://127.0.0.1')))) res.writeHead(404, { 'Content-Type': 'application/json' }).end('{"error":"not_found"}');
+    } catch (e) { console.error(`[lockbox] AI request failed: ${e.message}`); if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' }).end('{"error":"server_error"}'); }
+  });
+  server.on('error', e => console.error(`[lockbox] AI endpoint not started on port ${AI_PORT}: ${e.message}`));
+  server.listen(AI_PORT, '127.0.0.1');
+}
+
 app.whenReady().then(() => {
+  startAiServer();
   const root = path.join(dir, 'renderer-dist');
   protocol.handle('app', req => {
     const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, '') || 'index.html';

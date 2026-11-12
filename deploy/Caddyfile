@@ -3,7 +3,7 @@
 # password or password hash ever lives in this file.
 {$LOCKBOX_DOMAIN} {
 	encode gzip
-	@mail path /oauth/* /api/mailboxes /api/mailboxes/* /api/admin/* /api/auth/* /api/ai/*
+	@mail path /oauth/* /api/privacy /api/mailboxes /api/mailboxes/* /api/admin/* /api/auth/* /api/ai/*
 	handle @mail {
 		reverse_proxy mail:3000
 	}

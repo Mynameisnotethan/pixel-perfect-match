@@ -96,3 +96,10 @@ from your repository. `LOCKBOX_IMAGE_TAG` pins a tag instead of `latest`.
   limited for a few minutes.
 - Desktop users connect mail on their own PC (tokens in Windows Credential Manager); the server never sees them.
 - Logs: `docker compose logs -f mail`. The setup code is the only secret the log ever prints.
+
+## Connect an AI agent
+
+1. In Lockbox open **AI Access**, then **Create API key**, and copy the key. It is shown only once.
+2. Give your agent the address shown there (`https://YOUR-DOMAIN/api/ai/v1/messages`) and send the key as `Authorization: Bearer lbx_...`.
+3. Agents get only emails you have opened in Lockbox. Hidden parts are replaced by their label, for example `[hidden: Financial info]`, and the access is read-only. `GET /api/ai/v1/messages?limit=25&mailbox=<id>` lists emails; `GET /api/ai/v1/messages/<id>` reads one. Message text is the mailbox preview text.
+4. Delete a key on the same page to cut that agent off right away.

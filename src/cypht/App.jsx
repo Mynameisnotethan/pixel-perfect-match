@@ -4,6 +4,7 @@ import Compose from './Compose.jsx';
 import PrivacyBar from './PrivacyBar.jsx';
 import LabelManager from './LabelManager.jsx';
 import AiKeys from './AiKeys.jsx';
+import { rulesFrom } from '../../connectors/ai-feed.mjs';
 import { usePrivacyEditor } from './PrivacyEditor.jsx';
 import { addRanges, aiView, applyDefaults, labelFor, presetLabels, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml, htmlToText } from './compose-utils.js';
@@ -162,7 +163,7 @@ export default function App() {
     const bridge = liveBridge();
     setMailboxes(list => upsertMailbox(list, { ...box, status: 'syncing' }));
     try {
-      const incoming = inboxToMessages(box, await bridge.sync(box.id));
+      const incoming = inboxToMessages(box, await bridge.sync(box.id)).map(m => ({ ...m, ...(serverRules.current?.[m.id] || {}) }));
       setAccounts(all => [...all.filter(a => a.id !== box.id), liveAccount(box)]);
       setMessages(all => { const known = new Set(all.map(m => m.id)); return [...incoming.filter(m => !known.has(m.id)), ...all]; });
       setMailboxes(list => upsertMailbox(list, { ...box, status: 'connected' })); setSourceIds(null);
@@ -177,6 +178,28 @@ export default function App() {
     if (result) { notify(result === 'connected' ? 'Mailbox connected. Syncing your inbox…' : 'Mailbox sign-in did not finish. Please try again.'); window.history.replaceState(null, '', window.location.pathname); }
     refreshLive();
   }, []);
+  // Live mode: hide-from-AI rules are kept by Lockbox itself (server or desktop vault), because the AI feed
+  // redacts from that copy. Load it first, then save every change; never push before loading.
+  const serverRules = useRef(null);
+  const [privacyLoaded, setPrivacyLoaded] = useState(false);
+  useEffect(() => {
+    const p = liveBridge()?.privacy; if (!p) return;
+    p.get().then(doc => {
+      serverRules.current = doc?.rules || {};
+      setMessages(all => all.map(m => serverRules.current[m.id] ? { ...m, ...serverRules.current[m.id] } : m));
+      if (doc?.defaults) setAiDefaults(doc.defaults);
+      if (doc?.labels?.length) setLabels(doc.labels);
+      setPrivacyLoaded(true);
+    }).catch(e => notify(`Could not load your hide-from-AI settings: ${e.message}`));
+  }, []);
+  useEffect(() => {
+    const p = liveBridge()?.privacy; if (!p || !privacyLoaded) return;
+    const t = setTimeout(() => {
+      serverRules.current = { ...serverRules.current, ...rulesFrom(messages.filter(m => m.folder !== 'drafts')) };
+      p.put({ rules: serverRules.current, defaults: aiDefaults, labels }).catch(e => notify(`Hide-from-AI changes were not saved: ${e.message}`));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [messages, aiDefaults, labels, privacyLoaded]);
   function refreshLive() {
     const bridge = liveBridge(); if (!bridge) return;
     bridge.list().then(list => {

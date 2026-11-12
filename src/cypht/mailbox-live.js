@@ -25,6 +25,9 @@ const webBridge = {
   login: (username, password) => api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   setup: body => api('/api/auth/setup', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => api('/api/auth/logout', { method: 'POST' }),
+  // Hide-from-AI rules live on the server so the AI feed can enforce them.
+  privacy: { get: () => api('/api/privacy'), put: body => api('/api/privacy', { method: 'PUT', body: JSON.stringify(body) }) },
+  aiEndpoint: () => `${window.location.origin}/api/ai/v1`,
   aiKeys: {
     list: () => api('/api/ai/keys'),
     create: name => api('/api/ai/keys', { method: 'POST', body: JSON.stringify({ name }) }),
@@ -66,17 +69,7 @@ export const liveBridge = () => {
   return import.meta.env?.VITE_LOCKBOX_MAIL_API === '1' ? webBridge : null;
 };
 
-/** Splits "Name <a@b.c>" into its parts. */
-export function parseFrom(from = '') {
-  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
-  return m ? { sender: m[1].trim() || m[2], email: m[2].trim() } : { sender: from.trim(), email: from.trim() };
-}
-
-/** Converts synced provider inbox items into Lockbox messages for one mailbox. */
-export const inboxToMessages = (box, items) => items.map(item => {
-  const { sender, email } = parseFrom(item.from);
-  return { id: `${box.id}:${item.id}`, sender, email, subject: item.subject || '(no subject)', body: item.snippet || '', account: box.id, folder: 'inbox', read: !!item.read, flagged: false, date: item.date, attachments: [] };
-});
+export { parseFrom, inboxToMessages } from '../../connectors/ai-feed.mjs';
 
 export const liveAccount = box => ({ id: box.id, name: box.provider === 'imap' ? (box.settings?.name || box.email.split('@')[1]) : MAILBOX_PROVIDERS[box.provider].name, email: box.email, color: MAILBOX_PROVIDERS[box.provider].color, ...connectionInfo(box), live: true });
 

@@ -264,3 +264,5 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .imap-msg.is-bad{background:rgba(220,53,69,.1);color:#b02a37}
 .mailbox-list-main small+small{display:block}
 .mailbox-status.is-error{color:#b02a37}
+.ai-endpoint { margin: .75rem 0; display: grid; gap: .4rem; }
+.ai-endpoint code { word-break: break-all; }

@@ -7,11 +7,12 @@
   "main": "main.mjs",
   "scripts": {
     "renderer": "cd .. && npx vite build --config desktop/vite.renderer.config.mjs",
-    "start": "LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && npm run renderer && electron .",
+    "start": "npm run shared && LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && npm run renderer && electron .",
     "config": "node scripts/write-config.mjs",
-    "dist:win": "node scripts/write-config.mjs && npm run renderer && electron-builder --win nsis",
-    "dist:mac": "node scripts/write-config.mjs && npm run renderer && electron-builder --mac dmg",
-    "dist:linux": "node scripts/write-config.mjs && npm run renderer && electron-builder --linux AppImage"
+    "dist:win": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --win nsis",
+    "dist:mac": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --mac dmg",
+    "dist:linux": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --linux AppImage",
+    "shared": "node -e \"require('fs').cpSync('../connectors','connectors',{recursive:true})\""
   },
   "dependencies": {
     "imapflow": "^2.11.0",

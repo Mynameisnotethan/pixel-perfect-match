@@ -99,3 +99,7 @@ For a completely independent owner, they repeat the one-time setup on infrastruc
 - Never commit Hostinger passwords, OAuth secrets, mailbox tokens, or encryption keys.
 
 For the detailed command-line deployment, automatic updates, optional Windows builds, and troubleshooting, see [HOSTINGER_DEPLOY.md](./HOSTINGER_DEPLOY.md) and [MAILBOX_SETUP.md](./MAILBOX_SETUP.md).
+
+## AI agents
+
+Server: `https://YOUR-DOMAIN/api/ai/v1/messages` with `Authorization: Bearer lbx_...`. Desktop app: `http://127.0.0.1:47615/api/ai/v1/messages` (change the port with `LOCKBOX_AI_PORT`). The desktop address only works on that computer while Lockbox is open. Redaction uses the hide-from-AI rules that Lockbox stores itself: encrypted on the server, or in the OS vault on desktop.

@@ -15,6 +15,8 @@ import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
 import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
 import { createKeyStore } from './apikeys.mjs';
+import { createPrivacyStore } from './privacy-store.mjs';
+import { createAiRoutes, buildFeed } from '../connectors/ai-feed.mjs';
 import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
 
 const env = process.env;
@@ -35,6 +37,7 @@ if (KEY.length !== 32) throw new Error('LOCKBOX_TOKEN_KEY must be 32 random byte
 const encrypt = encryptWith.bind(null, KEY);
 const decrypt = decryptWith.bind(null, KEY);
 const aiKeys = createKeyStore({ file: path.join(DATA_DIR, 'apikeys.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) });
+const privacy = createPrivacyStore({ file: path.join(DATA_DIR, 'privacy.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) });
 const auth = createAuth({ dataDir: DATA_DIR, key: KEY, env, log: m => console.log(`[lockbox] ${m}`) });
 
 // ---- encrypted, restart-safe store: { [userId]: [{ id, provider, email, status, tokens }] }
@@ -93,6 +96,15 @@ async function withToken(user, id, fn) {
     throw e;
   }
 }
+
+// AI agents: a personal API key maps to exactly one user; only that user's mailboxes and rules are used.
+const aiRoutes = createAiRoutes({
+  verifyKey: key => aiKeys.verify(key),
+  feedFor: async (owner, { mailbox }) => buildFeed({
+    boxes: (await load())[owner] || [], mailbox, privacy: await privacy.get(owner),
+    fetchInbox: box => withToken(owner, box.id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)),
+  }),
+});
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -194,6 +206,13 @@ http.createServer(async (req, res) => {
       const { email } = await mail.microsoft.profile(r.tokens.accessToken);
       const box = await mutate(db => { db[user] = upsertMailbox(db[user] || [], { id: `microsoft:${email.toLowerCase()}`, provider: 'microsoft', email, status: 'connected', via: 'device', authClientId: d.clientId, tokens: r.tokens }); return db[user].find(b => b.id === `microsoft:${email.toLowerCase()}`); });
       return send(res, 200, { status: 'done', mailbox: publicBox(box) });
+    }
+    if (await aiRoutes(req, res, url)) return;
+    if (url.pathname === '/api/privacy') {
+      if (!user) return send(res, 401, { error: 'sign_in_required' });
+      if (req.method === 'GET') return send(res, 200, (await privacy.get(user)) || { rules: {}, defaults: null, labels: null });
+      if (req.method === 'PUT') { await privacy.put(user, await readJson(req)); return send(res, 204); }
+      return send(res, 405, { error: 'method_not_allowed' });
     }
     if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });

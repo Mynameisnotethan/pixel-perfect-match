@@ -236,3 +236,10 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
   .ai-key-table td:last-child { grid-row: 1 / span 4; grid-column: 2; align-self: center; }
   .ai-key-table td[data-label]::before { content: attr(data-label) ": "; color: var(--bs-secondary-color, #777); font-size: .8rem; }
 }
+
+/* No top banner; sidebar column matches the sidebar so no empty strip sits beside it */
+:root{--preview-banner-height:0px!important}.preview-banner{display:none!important}
+.cypht-layout{grid-template-columns:280px minmax(0,1fr)}
+@media(min-width:1600px){.cypht-layout{grid-template-columns:320px minmax(0,1fr)}}
+@media(max-width:1180px){.cypht-layout{grid-template-columns:235px minmax(0,1fr)}}
+.content_cell{margin-right:0;border-left:0}

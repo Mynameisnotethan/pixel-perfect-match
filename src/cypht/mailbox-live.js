@@ -40,6 +40,10 @@ const webBridge = {
     ui.onDeviceCode?.(d);
     try { return await waitForDevice(d, ui); } finally { ui.onDeviceCode?.(null); }
   },
+  imap: {
+    test: s => api('/api/mailboxes/imap/test', { method: 'POST', body: JSON.stringify(s) }),
+    save: s => api('/api/mailboxes/imap', { method: 'POST', body: JSON.stringify(s) }),
+  },
   sync: id => api(`/api/mailboxes/${encodeURIComponent(id)}/inbox`),
   send: (id, msg) => api(`/api/mailboxes/${encodeURIComponent(id)}/send`, { method: 'POST', body: JSON.stringify(msg) }),
   disconnect: id => api(`/api/mailboxes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -74,4 +78,10 @@ export const inboxToMessages = (box, items) => items.map(item => {
   return { id: `${box.id}:${item.id}`, sender, email, subject: item.subject || '(no subject)', body: item.snippet || '', account: box.id, folder: 'inbox', read: !!item.read, flagged: false, date: item.date, attachments: [] };
 });
 
-export const liveAccount = box => ({ id: box.id, name: MAILBOX_PROVIDERS[box.provider].name, email: box.email, color: MAILBOX_PROVIDERS[box.provider].color, host: box.provider === 'google' ? 'gmail.googleapis.com' : 'graph.microsoft.com', port: '443', type: box.provider === 'google' ? 'Gmail API' : 'Microsoft Graph', live: true });
+export const liveAccount = box => ({ id: box.id, name: box.provider === 'imap' ? (box.settings?.name || box.email.split('@')[1]) : MAILBOX_PROVIDERS[box.provider].name, email: box.email, color: MAILBOX_PROVIDERS[box.provider].color, ...connectionInfo(box), live: true });
+
+/** Protocol, server and port shown on the Servers page for any mailbox. */
+export function connectionInfo(box) {
+  if (box.provider === 'imap') return { type: 'IMAP / SMTP', host: box.settings?.imap?.host || '', port: String(box.settings?.imap?.port || 993), smtpHost: box.settings?.smtp?.host || '', smtpPort: String(box.settings?.smtp?.port || '') };
+  return box.provider === 'google' ? { type: 'Gmail API', host: 'gmail.googleapis.com', port: '443' } : { type: 'Microsoft Graph', host: 'graph.microsoft.com', port: '443' };
+}

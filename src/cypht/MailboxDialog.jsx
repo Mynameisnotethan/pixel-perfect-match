@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import SetupWizard from './SetupWizard.jsx';
+import ImapForm from './ImapForm.jsx';
 import { MAILBOX_PROVIDERS, STATUS_TEXT } from './mailbox-demo.js';
 import { liveBridge } from './mailbox-live.js';
 
 const Icon = ({ name }) => <i aria-hidden="true" className={`bi bi-${name}`} />;
 
-export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDisconnect, onExpire, onManual, onClose }) {
+export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDisconnect, onExpire, onImapTest, onImapSave, editBox, onClose }) {
   const [provider, setProvider] = useState(null);
+  const [imapBox, setImapBox] = useState(editBox ? { box: editBox } : null);
   const [email, setEmail] = useState('');
   const bridge = liveBridge(); const live = !!bridge;
   const [device, setDevice] = useState(null);
@@ -17,11 +19,11 @@ export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDis
   useEffect(() => { bridge?.providers?.().then(setInfo).catch(() => {}); }, [setup]);
   useEffect(() => () => { cancelled.current = true; }, []);
   const ui = { onDeviceCode: setDevice, cancelled: () => cancelled.current };
-  const start = p => { if (live) { cancelled.current = false; onConnect(p, undefined, ui); return; } setProvider(p); setEmail(p === 'google' ? 'you@gmail.com' : 'you@outlook.com'); };
+  const start = p => { if (p === 'imap') { setImapBox({ box: null }); return; } if (live) { cancelled.current = false; onConnect(p, undefined, ui); return; } setProvider(p); setEmail(p === 'google' ? 'you@gmail.com' : 'you@outlook.com'); };
   const submit = e => { e.preventDefault(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return; onConnect(provider, email.trim()); setProvider(null); };
   return <div className="mailbox-connect">
-    {!live && <div className="mailbox-demo-badge"><Icon name="info-circle" /> <span><strong>Demo mode.</strong> No Google or Microsoft sign-in happens in this preview. To connect real mailboxes, use the desktop app (built with Lockbox's Google and Microsoft app registrations) or a Docker install with its own registrations.</span></div>}
-    {setup ? <SetupWizard bridge={bridge} onDone={() => setSetup(false)} /> : <>
+    {!live && <div className="mailbox-demo-badge"><Icon name="info-circle" /> <span><strong>Demo mode.</strong> No Google, Microsoft or IMAP sign-in happens in this preview. To connect real mailboxes, use the desktop app (built with Lockbox's Google and Microsoft app registrations) or a Docker install with its own registrations.</span></div>}
+    {setup ? <SetupWizard bridge={bridge} onDone={() => setSetup(false)} /> : imapBox ? <ImapForm box={imapBox.box} live={live} onTest={onImapTest} onSave={async s => { await onImapSave(s); setImapBox(null); if (editBox) onClose(); }} onBack={() => (editBox ? onClose() : setImapBox(null))} /> : <>
     {device && <div className="mailbox-device" role="status">
       <p><strong>Finish connecting Outlook</strong><br /><small>Open Microsoft's sign-in page, enter this code, and approve access. This page updates by itself.</small></p>
       <div className="mailbox-device-code"><code>{device.userCode}</code>
@@ -42,15 +44,16 @@ export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDis
     {mailboxes.length > 0 && <><h3 className="mailbox-list-title">Connected mailboxes</h3><ul className="mailbox-list">
       {mailboxes.map(b => <li key={b.id}>
         <span className={`mailbox-provider-icon is-${b.provider}`}><Icon name={MAILBOX_PROVIDERS[b.provider].icon} /></span>
-        <span className="mailbox-list-main"><strong>{b.email}</strong><small className={`mailbox-status is-${b.status}`}>{['connecting', 'syncing'].includes(b.status) && <span className="spinner-border spinner-border-sm" aria-hidden="true" />} {STATUS_TEXT[b.status]}</small></span>
+        <span className="mailbox-list-main"><strong>{b.email}</strong><small>{b.provider === 'imap' ? (b.settings?.imap?.host || 'IMAP / SMTP') : MAILBOX_PROVIDERS[b.provider].name}</small><small className={`mailbox-status is-${b.status}`}>{['connecting', 'syncing'].includes(b.status) && <span className="spinner-border spinner-border-sm" aria-hidden="true" />} {STATUS_TEXT[b.status]}</small></span>
         <span className="mailbox-list-actions">
-          {b.status === 'reconnect' && <button className="btn btn-sm btn-primary" onClick={() => { cancelled.current = false; onReconnect(b, ui); }}>Reconnect</button>}
+          {b.status === 'reconnect' && <button className="btn btn-sm btn-primary" onClick={() => { if (b.provider === 'imap') { setImapBox({ box: b }); return; } cancelled.current = false; onReconnect(b, ui); }}>Reconnect</button>}
+          {b.provider === 'imap' && b.status !== 'reconnect' && <button className="btn btn-sm btn-outline-secondary" onClick={() => setImapBox({ box: b })}>Edit</button>}
           {!live && b.status === 'connected' && <button className="btn btn-sm btn-outline-secondary" title="Demo: simulate revoked access" onClick={() => onExpire(b)}>Simulate expiry</button>}
           <button className="btn btn-sm btn-outline-danger" onClick={() => onDisconnect(b)}>Disconnect</button>
         </span>
       </li>)}
     </ul></>}
-    <div className="dialog-actions">{live ? (info?.isAdmin ? <button type="button" className="btn btn-link btn-sm me-auto" onClick={() => setSetup(true)}><Icon name="gear" /> Setup</button> : <span className="me-auto" />) : <button type="button" className="btn btn-link btn-sm me-auto" onClick={onManual}>Add sample IMAP account instead</button>}<button type="button" className="btn btn-outline-secondary" onClick={onClose}>Done</button></div>
+    <div className="dialog-actions">{live ? (info?.isAdmin ? <button type="button" className="btn btn-link btn-sm me-auto" onClick={() => setSetup(true)}><Icon name="gear" /> Setup</button> : <span className="me-auto" />) : <span className="me-auto" />}<button type="button" className="btn btn-outline-secondary" onClick={onClose}>Done</button></div>
     </>}
   </div>;
 }

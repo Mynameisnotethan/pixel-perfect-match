@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('lockboxMailboxes', {
   connect: provider => ipcRenderer.invoke('mailbox:connect', provider),
   sync: id => ipcRenderer.invoke('mailbox:sync', id),
   send: (id, msg) => ipcRenderer.invoke('mailbox:send', id, msg),
+  imap: { test: s => ipcRenderer.invoke('mailbox:imapTest', s), save: s => ipcRenderer.invoke('mailbox:imapSave', s) },
   disconnect: id => ipcRenderer.invoke('mailbox:disconnect', id),
 });

@@ -1,6 +1,9 @@
 # Lockbox mailbox backend. Put an authenticating HTTPS reverse proxy in front of it.
 FROM node:22-alpine
 WORKDIR /app
+# IMAP/SMTP libraries for mailboxes other than Gmail and Outlook.
+COPY server/package.json ./package.json
+RUN npm install --omit=dev --no-audit --no-fund
 COPY connectors ./connectors
 COPY server ./server
 # Provider credentials are added after deployment through the admin Setup page.

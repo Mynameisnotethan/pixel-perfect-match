@@ -244,3 +244,23 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 @media(max-width:1180px){.cypht-layout{grid-template-columns:235px minmax(0,1fr)}}
 .content_cell{margin-right:0;border-left:0}
 .logo-button{display:flex;justify-content:center;width:100%}.logo-button .app-logo{padding-left:0}
+
+/* IMAP/SMTP connect form */
+.mailbox-provider-icon.is-imap{color:var(--lockbox-accent,#008080)}
+.imap-form{display:flex;flex-direction:column;gap:12px}
+.imap-form label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:600;flex:1;min-width:0}
+.imap-form label small{font-weight:400;opacity:.7}
+.imap-row{display:flex;gap:12px;flex-wrap:wrap}
+.imap-row>label{min-width:160px}
+.imap-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px}
+.imap-side{border:1px solid rgba(0,0,0,.12);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.imap-side legend{font-size:.8rem;font-weight:700;float:none;width:auto;padding:0 4px;margin:0}
+.imap-advanced summary{cursor:pointer;font-weight:600;font-size:.85rem}
+.imap-advanced>label{margin-top:10px}
+.imap-note,.imap-hint,.imap-msg{margin:0;font-size:.85rem;display:flex;gap:6px;align-items:flex-start}
+.imap-note{background:rgba(0,128,128,.08);border-radius:6px;padding:8px 10px}
+.imap-msg{padding:8px 10px;border-radius:6px}
+.imap-msg.is-ok{background:rgba(25,135,84,.1);color:#146c43}
+.imap-msg.is-bad{background:rgba(220,53,69,.1);color:#b02a37}
+.mailbox-list-main small+small{display:block}
+.mailbox-status.is-error{color:#b02a37}

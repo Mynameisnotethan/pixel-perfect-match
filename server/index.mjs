@@ -8,6 +8,9 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from '../connectors/oauth.mjs';
 import { mail, upsertMailbox } from '../connectors/mail.mjs';
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
+import { createImapClient, normalizeImap } from '../connectors/imap.mjs';
 import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
 import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
@@ -58,11 +61,14 @@ const deviceClientId = () => env.LOCKBOX_MS_DEVICE_CLIENT_ID || config.microsoft
 // Device tokens remember which client issued them, so changing Setup does not break refresh.
 const clientFor = box => box.via === 'device' ? { clientId: box.authClientId || deviceClientId() } : webClient(box.provider);
 const microsoftMode = () => (webClient('microsoft').clientId ? 'web' : deviceClientId() ? 'device' : 'none');
+// Tests point at a local fake mail server; production never allows private hosts.
+const allowPrivate = env.LOCKBOX_IMAP_ALLOW_PRIVATE === '1' && env.NODE_ENV !== 'production';
+const imap = createImapClient({ ImapFlow, nodemailer, allowPrivate });
 const devices = new Map(); // handle -> { user, clientId, deviceCode, expiresAt }
 const pending = new Map(); // state -> { verifier, provider, user, at }
 
 // ---- request helpers
-const publicBox = ({ tokens, authClientId, ...b }) => b;
+const publicBox = ({ tokens, authClientId, imap: settings, ...b }) => (settings ? { ...b, settings: { username: settings.username, name: settings.name, imap: settings.imap, smtp: settings.smtp, hasPassword: !!settings.password } } : b);
 const send = (res, status, body, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(body === undefined ? '' : JSON.stringify(body)); };
 const readJson = req => new Promise((ok, bad) => { let s = ''; req.on('data', c => { s += c; if (s.length > 1e6) req.destroy(); }); req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } }); });
 const cookiesOf = req => Object.fromEntries((req.headers.cookie || '').split(';').map(p => { const i = p.indexOf('='); return i < 0 ? [] : [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())]; }).filter(e => e.length));
@@ -75,6 +81,10 @@ const ipOf = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].t
 async function withToken(user, id, fn) {
   const box = (await load())[user]?.find(b => b.id === id);
   if (!box) throw Object.assign(new Error('not_found'), { status: 404 });
+  if (box.provider === 'imap') {
+    try { return await fn(null, box); }
+    catch (e) { if (['wrong_password', 'app_password_needed'].includes(e.message)) await mutate(db => { const b = db[user].find(x => x.id === id); if (b) b.status = 'reconnect'; }); throw e; }
+  }
   try {
     const t = await ensureFresh(box.provider, box.tokens, clientFor(box), next => mutate(db => { const b = db[user].find(x => x.id === id); b.tokens = next; b.status = 'connected'; }));
     return await fn(t.accessToken, box);
@@ -149,6 +159,20 @@ http.createServer(async (req, res) => {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       return send(res, 200, { google: webClient('google').clientId && publicUrl() ? 'web' : 'none', microsoft: microsoftMode(), isAdmin: auth.isAdmin(user) });
     }
+    if ((url.pathname === '/api/mailboxes/imap/test' || url.pathname === '/api/mailboxes/imap') && req.method === 'POST') {
+      if (!user) return send(res, 401, { error: 'sign_in_required' });
+      if (!auth.limit(`${user}:${ipOf(req)}`, 'imap')) return send(res, 429, { error: 'too_many_attempts' });
+      const body = await readJson(req);
+      const id = `imap:${String(body.email || '').trim().toLowerCase()}`;
+      // Editing without retyping the password keeps the saved one.
+      const prev = ((await load())[user] || []).find(b => b.id === id)?.imap;
+      const s = normalizeImap({ ...body, password: body.password || prev?.password || '' }, { allowPrivate });
+      if (!s.password) return send(res, 400, { error: 'password_required' });
+      await imap.test(s);
+      if (url.pathname.endsWith('/test')) return send(res, 200, { ok: true });
+      const box = await mutate(db => { db[user] = upsertMailbox(db[user] || [], { id, provider: 'imap', email: s.email, status: 'connected', via: 'imap', imap: s }); return db[user].find(b => b.id === id); });
+      return send(res, 200, publicBox(box));
+    }
     if (url.pathname === '/api/mailboxes/device/start' && req.method === 'POST') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const clientId = deviceClientId();
@@ -184,11 +208,11 @@ http.createServer(async (req, res) => {
     const id = decodeURIComponent(url.pathname.split('/')[3] || '');
     const action = url.pathname.split('/')[4];
     if (req.method === 'GET' && !id) return send(res, 200, ((await load())[user] || []).map(publicBox));
-    if (req.method === 'GET' && action === 'inbox') return send(res, 200, await withToken(user, id, (t, b) => mail[b.provider].inbox(t)));
+    if (req.method === 'GET' && action === 'inbox') return send(res, 200, await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)));
     if (req.method === 'POST' && action === 'send') {
       const { to, subject = '', body = '' } = await readJson(req);
       if (typeof to !== 'string' || !/^[^\s@,]+@[^\s@,]+(\s*,\s*[^\s@,]+@[^\s@,]+)*$/.test(to) || subject.length > 998 || body.length > 500_000) return send(res, 400, { error: 'invalid_message' });
-      await withToken(user, id, (t, b) => mail[b.provider].send(t, b.email, { to, subject, body }));
+      await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.send(b.imap, { to, subject, body }) : mail[b.provider].send(t, b.email, { to, subject, body }));
       return send(res, 202, { ok: true });
     }
     if (req.method === 'DELETE' && id) { await mutate(db => { db[user] = (db[user] || []).filter(b => b.id !== id); }); return send(res, 204); }

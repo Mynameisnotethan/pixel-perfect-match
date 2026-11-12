@@ -14,7 +14,9 @@
     "dist:linux": "node scripts/write-config.mjs && npm run renderer && electron-builder --linux AppImage"
   },
   "dependencies": {
-    "keytar": "^7.9.0"
+    "imapflow": "^2.11.0",
+    "keytar": "^7.9.0",
+    "nodemailer": "^10.5.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",

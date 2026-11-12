@@ -11,7 +11,7 @@ describe("real mail mode", () => {
     const { default: App } = await import("../cypht/App.jsx");
     render(<App />);
     expect(screen.queryByText("Sarah Chen")).toBeNull();
-    expect(await screen.findByText(/Connect your Gmail or Outlook/)).toBeTruthy();
+    expect(await screen.findByText(/Connect Gmail, Outlook or any IMAP email/)).toBeTruthy();
     delete (window as any).lockboxMailboxes;
   });
 });

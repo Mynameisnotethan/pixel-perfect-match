@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 import keytar from 'keytar';
 import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from './connectors/oauth.mjs';
 import { mail, upsertMailbox } from './connectors/mail.mjs';
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
+import { createImapClient, normalizeImap } from './connectors/imap.mjs';
+// The desktop runs on the user's own computer, so home-network mail servers are allowed.
+const imap = createImapClient({ ImapFlow, nodemailer, allowPrivate: true });
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const SERVICE = 'Lockbox Mailboxes';
@@ -71,6 +76,7 @@ async function connect(providerId) {
 async function withToken(id, fn) {
   const list = await readIndex(); const box = list.find(b => b.id === id);
   if (!box) throw new Error('Mailbox not found');
+  if (box.provider === 'imap') return fn(null, box, await tokensFor(id));
   try {
     const t = await ensureFresh(box.provider, await tokensFor(id), clients[box.provider], next => saveTokens(id, next));
     return await fn(t.accessToken, box);
@@ -84,8 +90,20 @@ const guard = e => { if (new URL(e.senderFrame.url).origin !== appOrigin) throw 
 const on = (channel, fn) => ipcMain.handle(channel, (e, ...args) => { guard(e); return fn(...args); });
 on('mailbox:list', () => readIndex());
 on('mailbox:connect', provider => connect(provider));
-on('mailbox:sync', id => withToken(id, (t, box) => mail[box.provider].inbox(t)));
-on('mailbox:send', (id, msg) => withToken(id, (t, box) => mail[box.provider].send(t, box.email, msg)));
+on('mailbox:sync', id => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.inbox(s) : mail[box.provider].inbox(t)));
+on('mailbox:send', (id, msg) => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.send(s, msg) : mail[box.provider].send(t, box.email, msg)));
+async function imapSettings(body) {
+  const id = `imap:${String(body.email || '').trim().toLowerCase()}`;
+  const prev = await tokensFor(id);
+  return { id, s: normalizeImap({ ...body, password: body.password || prev?.password || '' }, { allowPrivate: true }) };
+}
+on('mailbox:imapTest', async body => { const { s } = await imapSettings(body); await imap.test(s); return { ok: true }; });
+on('mailbox:imapSave', async body => {
+  const { id, s } = await imapSettings(body); await imap.test(s);
+  const list = upsertMailbox(await readIndex(), { id, provider: 'imap', email: s.email, status: 'connected', settings: { username: s.username, name: s.name, imap: s.imap, smtp: s.smtp, hasPassword: true } });
+  await saveTokens(id, s); await writeIndex(list);
+  return list.find(b => b.id === id);
+});
 on('mailbox:disconnect', async id => { await keytar.deletePassword(SERVICE, `tokens:${id}`); await writeIndex((await readIndex()).filter(b => b.id !== id)); });
 
 app.whenReady().then(() => {

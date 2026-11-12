@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error JS module
 import { freshDefaults, confirmsLock } from '../cypht/privacy.js';
 describe('hide-by-default', () => {
   it('new users hide everything', () => {

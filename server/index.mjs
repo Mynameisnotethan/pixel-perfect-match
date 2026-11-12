@@ -11,6 +11,7 @@ import { mail, upsertMailbox } from '../connectors/mail.mjs';
 import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
 import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
+import { createKeyStore } from './apikeys.mjs';
 import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
 
 const env = process.env;
@@ -30,6 +31,7 @@ if (KEY.length !== 32) throw new Error('LOCKBOX_TOKEN_KEY must be 32 random byte
 
 const encrypt = encryptWith.bind(null, KEY);
 const decrypt = decryptWith.bind(null, KEY);
+const aiKeys = createKeyStore({ file: path.join(DATA_DIR, 'apikeys.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) });
 const auth = createAuth({ dataDir: DATA_DIR, key: KEY, env, log: m => console.log(`[lockbox] ${m}`) });
 
 // ---- encrypted, restart-safe store: { [userId]: [{ id, provider, email, status, tokens }] }
@@ -168,6 +170,14 @@ http.createServer(async (req, res) => {
       const { email } = await mail.microsoft.profile(r.tokens.accessToken);
       const box = await mutate(db => { db[user] = upsertMailbox(db[user] || [], { id: `microsoft:${email.toLowerCase()}`, provider: 'microsoft', email, status: 'connected', via: 'device', authClientId: d.clientId, tokens: r.tokens }); return db[user].find(b => b.id === `microsoft:${email.toLowerCase()}`); });
       return send(res, 200, { status: 'done', mailbox: publicBox(box) });
+    }
+    if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
+      if (!user) return send(res, 401, { error: 'sign_in_required' });
+      const keyId = decodeURIComponent(url.pathname.slice('/api/ai/keys/'.length) || '');
+      if (req.method === 'GET' && !keyId) return send(res, 200, await aiKeys.list(user));
+      if (req.method === 'POST' && !keyId) return send(res, 201, await aiKeys.create(user, (await readJson(req)).name));
+      if (req.method === 'DELETE' && keyId) return (await aiKeys.remove(user, keyId)) ? send(res, 204) : send(res, 404, { error: 'not_found' });
+      return send(res, 405, { error: 'method_not_allowed' });
     }
     if (!url.pathname.startsWith('/api/mailboxes')) return send(res, 404, { error: 'not_found' });
     if (!user) return send(res, 401, { error: 'sign_in_required' });

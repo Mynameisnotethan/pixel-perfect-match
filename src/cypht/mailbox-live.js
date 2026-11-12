@@ -25,6 +25,11 @@ const webBridge = {
   login: (username, password) => api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   setup: body => api('/api/auth/setup', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => api('/api/auth/logout', { method: 'POST' }),
+  aiKeys: {
+    list: () => api('/api/ai/keys'),
+    create: name => api('/api/ai/keys', { method: 'POST', body: JSON.stringify({ name }) }),
+    remove: id => api(`/api/ai/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  },
   // Gmail (and Outlook when the admin set up a web app): the browser goes to the provider and back.
   // Outlook otherwise uses a one-time code, so no Entra app is needed on this server.
   connect: async (provider, ui = {}) => {

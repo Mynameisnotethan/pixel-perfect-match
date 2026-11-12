@@ -25,19 +25,19 @@ describe("docker-compose.yml is deployable from a bare URL", () => {
   });
 
   it("runs every service from a published image", () => {
-    for (const service of ["caddy", "web", "mail"]) {
+    for (const service of ["web", "mail"]) {
       expect(serviceBlock(service)).toMatch(/image:\s*ghcr\.io\//);
     }
   });
 
-  it("keeps the Caddyfile inside the proxy image instead of mounting it", () => {
-    expect(serviceBlock("caddy")).toMatch(/lockbox-proxy/);
+  it("routes sign-in and mailbox paths to the mail backend through Hostinger's Traefik", () => {
+    expect(serviceBlock("mail")).toMatch(/PathPrefix\(`\/api\/auth\/`\)/);
+    expect(serviceBlock("mail")).toMatch(/PathPrefix\(`\/oauth\/`\)/);
     expect(readFileSync("Dockerfile.proxy", "utf8")).toMatch(/COPY deploy\/Caddyfile \/etc\/caddy\/Caddyfile/);
   });
 
   it("needs nothing but the domain, and keeps the data volume", () => {
-    const caddy = serviceBlock("caddy");
-    expect(caddy).toMatch(/LOCKBOX_DOMAIN: \$\{LOCKBOX_DOMAIN:\?/);
+    expect(serviceBlock("mail")).toMatch(/LOCKBOX_DOMAIN: \$\{LOCKBOX_DOMAIN/);
     expect(serviceBlock("mail")).toMatch(/lockbox-data:\/data/);
   });
 
@@ -58,7 +58,7 @@ describe("docker-compose.yml is deployable from a bare URL", () => {
   });
 
   it("lets each owner run images built from their own repository", () => {
-    for (const service of ["caddy", "web", "mail"]) {
+    for (const service of ["web", "mail"]) {
       expect(serviceBlock(service)).toMatch(/ghcr\.io\/\$\{LOCKBOX_IMAGE_ORG:-/);
     }
   });

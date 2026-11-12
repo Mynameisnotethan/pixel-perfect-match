@@ -6,10 +6,14 @@ import LabelManager from './LabelManager.jsx';
 import { usePrivacyEditor } from './PrivacyEditor.jsx';
 import { addRanges, aiView, applyDefaults, labelFor, presetLabels, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml, htmlToText } from './compose-utils.js';
-import logoDark from '../assets/lockbox-logo-dark.png.asset.json';
-import logoLight from '../assets/lockbox-logo-light.png.asset.json';
+// Logos are bundled files so self-hosted servers and the desktop app can show them.
+const logoDark = { url: '/brand/lockbox-logo-dark.png' };
+const logoLight = { url: '/brand/lockbox-logo-light.png' };
 
-const STORE = 'cypht-preview:v1:';
+import { liveBridge as detectLive } from './mailbox-live.js';
+// Real (server/desktop) mode never shows sample data and keeps its saved data apart from the preview's.
+const LIVE = typeof window !== 'undefined' && !!detectLive();
+const STORE = LIVE ? 'lockbox-live:v1:' : 'cypht-preview:v1:';
 function useSaved(key, initial) {
   const [value, setValue] = useState(() => {
     try { const saved = localStorage.getItem(STORE + key); return saved ? JSON.parse(saved) : typeof initial === 'function' ? initial() : initial; }
@@ -51,9 +55,9 @@ import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId 
 
 export default function App() {
   const auth = useAuth();
-  const [accounts, setAccounts] = useSaved('accounts', initialAccounts);
-  const [messages, setMessages, messagesStorageError] = useSaved('messages', seedMessages);
-  const [contacts, setContacts] = useSaved('contacts', initialContacts);
+  const [accounts, setAccounts] = useSaved('accounts', LIVE ? [] : initialAccounts);
+  const [messages, setMessages, messagesStorageError] = useSaved('messages', LIVE ? [] : seedMessages);
+  const [contacts, setContacts] = useSaved('contacts', LIVE ? [] : initialContacts);
   const [settings, setSettings] = useSaved('settings', initialSettings);
   const [events, setEvents] = useSaved('events', []);
   const [view, setView] = useState('everything');
@@ -171,8 +175,18 @@ export default function App() {
     const bridge = liveBridge(); if (!bridge) return;
     const result = new URLSearchParams(window.location.search).get('mailbox');
     if (result) { notify(result === 'connected' ? 'Mailbox connected. Syncing your inbox…' : 'Mailbox sign-in did not finish. Please try again.'); window.history.replaceState(null, '', window.location.pathname); }
-    bridge.list().then(list => list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box))).catch(() => {});
+    refreshLive();
   }, []);
+  function refreshLive() {
+    const bridge = liveBridge(); if (!bridge) return;
+    bridge.list().then(list => {
+      // Drop mailboxes the server no longer has, then sync the rest.
+      const ids = new Set(list.map(b => b.id));
+      setMailboxes(l => l.filter(b => ids.has(b.id)));
+      setAccounts(all => all.filter(a => ids.has(a.id)));
+      list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box));
+    }).catch(e => notify(`Could not load your mailboxes: ${e.message}`));
+  }
   async function connectMailbox(provider, email, ui) {
     const bridge = liveBridge();
     if (bridge) {
@@ -280,7 +294,7 @@ export default function App() {
   const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
 
   return <div className={`preview-root ${collapsed ? 'sidebar-collapsed' : ''} ${settings.compact ? 'compact' : ''}`}>
-    <div className="preview-banner"><span><span className="preview-dot" /> {auth.web ? <>Signed in as <strong>{auth.user}</strong></> : <>Editable preview <span className="banner-detail">· Sample accounts and messages · Demo sign-in, no server</span></>}</span><span className="banner-actions">{auth.web && <button onClick={() => auth.signOut()}>Sign out <Icon name="box-arrow-right" /></button>}<button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button></span></div>
+    <div className="preview-banner"><span><span className="preview-dot" /> {LIVE && !auth.web ? <>Lockbox</> : auth.web ? <>Signed in as <strong>{auth.user}</strong></> : <>Editable preview <span className="banner-detail">· Sample accounts and messages · Demo sign-in, no server</span></>}</span><span className="banner-actions">{auth.web && <button onClick={() => auth.signOut()}>Sign out <Icon name="box-arrow-right" /></button>}{!LIVE && <button onClick={() => setModal({ type: 'about' })}>About this preview <Icon name="info-circle" /></button>}</span></div>
     <header className="mobile-header"><Tool icon="list" label="Open navigation" onClick={() => setSidebar(!sidebar)} /><img src={settings.theme === 'darkly' ? logoLight.url : logoDark.url} alt="Lockbox" /><span>{title}</span></header>
     {sidebar && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebar(false)} />}
     <div className="cypht-layout">
@@ -312,7 +326,7 @@ export default function App() {
         </ul>}
         {group('feeds', 'Feed')}{groups.feeds && <ul className="folders">{nav('feeds', 'News feeds', 'rss')}</ul>}
         {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Site', 'gear-wide-connected')}{nav('ai', 'AI Access', 'robot')}{nav('save', 'Save', 'download')}</ul>}
-        <div className="sidebar-footer"><button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button><button onClick={() => notify('Preview is up to date. Real mail sync is not connected.')} title="Reload preview"><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button>{auth.web && <button onClick={() => auth.signOut()} title="Sign out"><Icon name="box-arrow-right" /><span className="nav-label"> Sign out</span></button>}<button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
+        <div className="sidebar-footer">{!LIVE && <button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button>}<button onClick={() => LIVE ? refreshLive() : notify('Preview is up to date. Real mail sync is not connected.')} title={LIVE ? 'Refresh mail' : 'Reload preview'}><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button>{auth.web && <button onClick={() => auth.signOut()} title="Sign out"><Icon name="box-arrow-right" /><span className="nav-label"> Sign out</span></button>}<button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
       </div></nav>
       <main className="content_cell" id="main-content">
         {mailboxView && <>
@@ -334,7 +348,7 @@ export default function App() {
                   <td className="date-cell"><button className="message-open" onClick={() => openMessage(m)} title={messageTime(m.date)}>{m.folder !== 'drafts' && <Icon name={lockStatus(m, aiDefaults) === 'green' ? 'unlock-fill' : 'lock-fill'} className={`lock-status lock-${lockStatus(m, aiDefaults)}`} />}{formatDate(m.date)}</button></td>
                 </tr>)}
               </tbody></table>
-              {visible.length === 0 && <div className="empty-state"><Icon name={query ? 'search' : 'inbox'} /><h2>{query ? 'No matching messages' : 'No messages'}</h2><p>{query ? 'Try a different name, subject, or keyword.' : 'This folder has no sample messages.'}</p>{query && <button className="btn btn-outline-secondary" onClick={() => setQuery('')}>Clear search</button>}</div>}
+              {visible.length === 0 && <div className="empty-state"><Icon name={query ? 'search' : 'inbox'} /><h2>{query ? 'No matching messages' : 'No messages'}</h2><p>{query ? 'Try a different name, subject, or keyword.' : (LIVE && mailboxes.length === 0 ? 'Connect your Gmail or Outlook to see your mail here.' : LIVE ? 'This folder is empty.' : 'This folder has no sample messages.')}</p>{query && <button className="btn btn-outline-secondary" onClick={() => setQuery('')}>Clear search</button>}{!query && LIVE && mailboxes.length === 0 && <button className="btn btn-primary" onClick={() => setModal({ type: 'mailbox' })}><Icon name="plus-lg" /> Add mailbox</button>}</div>}
               <div className="list-pagination"><span>{visible.length ? `${(activePage - 1) * Number(settings.pageSize) + 1}–${Math.min(activePage * Number(settings.pageSize), visible.length)} of ${visible.length}` : '0 messages'}</span><div><Tool icon="chevron-left" label="Previous page" disabled={activePage === 1} onClick={() => setPage(activePage - 1)} /><span>Page {activePage} of {pages}</span><Tool icon="chevron-right" label="Next page" disabled={activePage === pages} onClick={() => setPage(activePage + 1)} /></div></div>
             </section>}
             {active && <article className="message-reader"><div className="reader-toolbar"><Tool icon="arrow-left" label="Back to messages" onClick={() => setCurrent(null)}> Back</Tool><div>{active.folder !== 'drafts' && <Tool icon={lockStatus(active, aiDefaults) === 'green' ? 'unlock-fill' : 'lock-fill'} label={`Hide from AI — ${privacyStatusLabels[lockStatus(active, aiDefaults)]}`} className={`reader-lock lock-${lockStatus(active, aiDefaults)} ${pv.mode ? 'privacy-active' : ''}`} onClick={() => pv.setMode(pv.mode ? null : 'lock')} />}<Tool icon="reply" label="Reply" onClick={() => compose('reply', active)} /><Tool icon="forward" label="Forward" onClick={() => compose('forward', active)} /><Tool icon={active.flagged ? 'flag-fill' : 'flag'} label="Toggle message flag" onClick={() => updateMessages([active.id], { flagged: !active.flagged })} /><Tool icon="envelope" label="Mark message unread" onClick={() => { updateMessages([active.id], { read: false }); setCurrent(null); }} /><Tool icon="archive" label="Archive message" onClick={() => move([active.id], 'archive')} /><Tool icon="inbox" label="Move message to Inbox" onClick={() => move([active.id], 'inbox')} /><Tool icon="trash" label="Delete message" onClick={() => remove([active.id])} /></div></div><div className={`reader-content ${pv.mode ? 'privacy-editing' : ''}`}>{pv.mode ? <section className="privacy-section privacy-subject-section" aria-label="Subject privacy"><span className="privacy-field-label">Subject</span><h2>{pv.text('subject', active.subject, pv.eff.hiddenSubjectRanges)}</h2></section> : <h2>{active.subject}</h2>}<div className="message-headers"><div className="sender-avatar">{active.sender.slice(0, 1)}</div><div className="sender-details">{pv.mode && !isReceived(active) ? <div className="privacy-sender-fields"><div className="privacy-header-row"><span className="privacy-field-label">To</span><span>{pv.text('to', active.to || '', pv.eff.hiddenToRanges, true, 'recipients')}</span></div></div> : pv.mode ? <div className="privacy-sender-fields"><div className="privacy-header-row"><span className="privacy-field-label">Name</span><strong>{pv.text('sender', active.sender, pv.eff.hiddenSenderRanges, true)}</strong></div><div className="privacy-header-row"><span className="privacy-field-label">Email</span><span>{pv.text('email', active.email, pv.eff.hiddenEmailRanges, true)}</span></div></div> : <><strong>{active.sender}</strong> <span>&lt;{active.email}&gt;</span></>}{!(pv.mode && !isReceived(active)) && <p>To: {active.to || accountFor(active.account)?.email}</p>}</div><time>{messageTime(active.date)}</time></div>{active.folder === 'scheduled' && <div className="scheduled-notice"><Icon name="clock-history" /><span>Demo scheduled for {messageTime(active.scheduledAt)}. It is processed only while this browser app is open.</span><button className="btn btn-sm btn-outline-secondary" onClick={() => cancelScheduled(active)}>Cancel send</button></div>}{pv.mode ? <section className="privacy-section privacy-body-section" aria-label="Message privacy"><span className="privacy-field-label">Message</span><div className="message-body">{pv.text('body', active.body, pv.eff.hiddenRanges)}</div></section> : <div className="message-body">{active.bodyHtml ? <div className="rich-message-content" dangerouslySetInnerHTML={{ __html: cleanHtml(active.bodyHtml) }} /> : active.body}</div>}{active.attachments?.length > 0 && <div className="attachments"><h3>Attachments</h3>{active.attachments.map((a, i) => { const hid = (pv.eff.hiddenAttachments || []).includes(i); const attLabel = labelFor(pv.eff.hiddenAttachmentLabels?.[i], labels); return <button key={i} style={pv.mode && hid && attLabel ? { '--label-color': attLabel.color } : undefined} title={pv.mode && hid && attLabel ? attLabel.name : undefined} className={`${pv.mode && hid ? 'att-hidden' : ''} ${pv.pendAtts.includes(i) ? 'att-picked' : ''}`} onClick={() => { if (pv.mode) { pv.pickAttachment(i); return; } if (a.content?.startsWith('data:')) { const link = document.createElement('a'); link.href = a.content; link.download = a.name; link.click(); } else downloadText(a.name, a.content || 'Attachment metadata only. Re-add the original file to download it.'); }}><Icon name={pv.mode && hid ? 'lock-fill' : 'file-earmark-text'} /><span>{pv.mode && hid ? mask(a.name) : a.name}</span><Icon name={pv.mode && hid ? 'eye-slash' : 'download'} /></button>; })}</div>}{pv.mode && <PrivacyBar labels={labels} label={hideLabel} setLabel={setHideLabel} onAddLabel={l => { setLabels(x => [...x, l]); setHideLabel(l.id); }} mode={pv.mode} setMode={pv.setMode} pending={pv.pending} onClose={pv.close} onConfirm={pv.confirm} onHideAll={pv.hideAll} />}<div className="reader-bottom"><button className="btn btn-outline-secondary" onClick={() => compose('reply', active)}><Icon name="reply" /> Reply</button><button className="btn btn-outline-secondary" onClick={() => compose('forward', active)}><Icon name="forward" /> Forward</button></div></div></article>}

@@ -1,35 +1,26 @@
-# Lockbox self-hosted stack: Caddy (HTTPS) -> web app + mail server.
-# Built for Hostinger Docker Manager "Compose from URL": that feature downloads ONLY this file, so
-# nothing here is built from a folder or mounted from a relative path. Every service runs from a
-# published image. Setup: docs/HOSTINGER_DEPLOY.md
-#
-# Paste this link in Hostinger (raw file, not the GitHub page):
-#   https://raw.githubusercontent.com/Mynameisnotethan/pixel-perfect-match/main/docker-compose.yml
-#
-# Defaults to srv1790211.hstgr.cloud. Set LOCKBOX_DOMAIN in Hostinger's Environment panel to use a different hostname.
-# The administrator account is created in the browser after deployment, using a one-time setup code
-# that appears in the mail container's logs.
-# LOCKBOX_IMAGE_ORG / LOCKBOX_IMAGE_TAG are optional: point them at your own fork's images
-# (ghcr.io builds them from your repository) instead of the upstream ones.
+# Lockbox behind the existing Hostinger Traefik instance (host network mode).
+# Traefik terminates HTTPS. Neither service publishes a host port.
 services:
-  caddy:
-    image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-proxy:${LOCKBOX_IMAGE_TAG:-latest}
-    restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    environment:
-      LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}
-    # Caddy needs a bare host name. Hostinger sometimes hands you the hostname with https:// or a
-    # trailing slash, so it is trimmed here instead of failing the whole deploy.
-    entrypoint: ["/bin/sh", "-c", "export LOCKBOX_DOMAIN=$$(printf %s \"$$LOCKBOX_DOMAIN\" | sed -e 's#^[a-z]*://##' -e 's#/*$$##') && exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
-    volumes:
-      - caddy-data:/data          # HTTPS certificates
-    depends_on: [web, mail]
   web:
     image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-web:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.lockbox-web.rule: 'Host(`${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}`)'
+      traefik.http.routers.lockbox-web.entrypoints: websecure
+      traefik.http.routers.lockbox-web.tls.certresolver: ${LOCKBOX_TLS_RESOLVER:-letsencrypt}
+      traefik.http.routers.lockbox-web.service: lockbox-web
+      traefik.http.services.lockbox-web.loadbalancer.server.port: "3000"
   mail:
     image: ghcr.io/${LOCKBOX_IMAGE_ORG:-mynameisnotethan}/lockbox-mail:${LOCKBOX_IMAGE_TAG:-latest}
     restart: unless-stopped
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.lockbox-mail.rule: 'Host(`${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}`) && (PathPrefix(`/oauth/`) || Path(`/api/mailboxes`) || PathPrefix(`/api/mailboxes/`) || PathPrefix(`/api/admin/`) || PathPrefix(`/api/auth/`))'
+      traefik.http.routers.lockbox-mail.entrypoints: websecure
+      traefik.http.routers.lockbox-mail.tls.certresolver: ${LOCKBOX_TLS_RESOLVER:-letsencrypt}
+      traefik.http.routers.lockbox-mail.service: lockbox-mail
+      traefik.http.services.lockbox-mail.loadbalancer.server.port: "3000"
     environment:
       # Used only as the default public address; the Setup page can still override it.
       LOCKBOX_DOMAIN: ${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}
@@ -44,5 +35,4 @@ services:
     volumes:
       - lockbox-data:/data        # encrypted mailbox tokens, accounts, sessions + key; survives restarts and updates
 volumes:
-  caddy-data:
   lockbox-data:

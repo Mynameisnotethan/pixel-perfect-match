@@ -243,3 +243,4 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 @media(min-width:1600px){.cypht-layout{grid-template-columns:320px minmax(0,1fr)}}
 @media(max-width:1180px){.cypht-layout{grid-template-columns:235px minmax(0,1fr)}}
 .content_cell{margin-right:0;border-left:0}
+.logo-button{display:flex;justify-content:center;width:100%}.logo-button .app-logo{padding-left:0}

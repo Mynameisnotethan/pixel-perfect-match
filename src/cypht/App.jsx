@@ -96,7 +96,7 @@ const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', fl
 
 import MailboxDialog from './MailboxDialog.jsx';
 import { useAuth } from './AuthScreens.jsx';
-import { liveBridge, inboxToMessages, liveAccount, connectionInfo, downloadRemoteAttachment } from './mailbox-live.js';
+import { liveBridge, inboxToMessages, liveAccount, connectionInfo, downloadRemoteAttachment, fetchRemoteAttachment, forwardAttachments } from './mailbox-live.js';
 import { parseAccountView } from './mailbox-view.js';
 import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId, MAILBOX_PROVIDERS, STATUS_TEXT } from './mailbox-demo.js';
 
@@ -335,8 +335,16 @@ export default function App() {
       d.subject = `${kind === 'forward' ? 'Fwd: ' : 'Re: '}${message.subject.replace(/^(Re: |Fwd: )/i, '')}`;
       d.body = `\n\n${kind === 'forward' ? '---------- Forwarded message ----------' : `On ${formatDate(message.date)}, ${message.sender} wrote:`}\n${message.body.split('\n').map(s => '> ' + s).join('\n')}`;
       d.bodyHtml = textToHtml(d.body);
+      if (kind === 'forward') d.attachments = forwardAttachments(message);
     }
     setDrafts(all => [...all, d]);
+    // Files still on the mail server are fetched now so the forward carries the real file.
+    const bridge = liveBridge();
+    for (const a of d.attachments.filter(item => item.remote)) {
+      const done = patch => setDrafts(all => all.map(item => item.id === d.id ? { ...item, attachments: item.attachments.map(x => x.id === a.id ? { ...x, ...patch } : x) } : item));
+      if (!bridge) { done({ status: 'error', error: 'Open this email in Lockbox desktop or server to forward its files.' }); continue; }
+      fetchRemoteAttachment(bridge, message.account, a).then(r => done({ content: `data:${r.type || 'application/octet-stream'};base64,${r.data}`, type: r.type || a.type, status: 'ready', progress: 100 }), () => done({ status: 'error', error: 'Could not fetch this file. Remove it or try again.' }));
+    }
   }
   function updateDraft(next) { setDrafts(all => all.map(item => item.id === next.id ? { ...next, saveState: 'saving' } : item)); }
   function saveNow(list) {

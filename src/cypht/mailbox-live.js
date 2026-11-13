@@ -82,9 +82,17 @@ export function connectionInfo(box) {
 
 /** Fetches a synced email's attachment from the mailbox and saves it as a file. */
 export async function downloadRemoteAttachment(bridge, accountId, att) {
-  const r = await bridge.attachment(accountId, att.remote.message, att.remote.id);
+  const r = await fetchRemoteAttachment(bridge, accountId, att);
   const bytes = Uint8Array.from(atob(r.data), c => c.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type: r.type || 'application/octet-stream' }));
   const a = document.createElement('a'); a.href = url; a.download = r.name || att.name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export const fetchRemoteAttachment = (bridge, accountId, att) => bridge.attachment(accountId, att.remote.message, att.remote.id);
+
+/** Attachments a forward should carry: local files are copied, server-side files start as "uploading" until fetched. */
+export const forwardAttachments = message => (message.attachments || []).map((a, i) => ({
+  id: `fwd-${message.id}-${i}`, name: a.name, type: a.type || 'application/octet-stream', size: a.size || (a.content ? Math.round((a.content.split(',')[1] || a.content).length * (a.content.startsWith('data:') ? 0.75 : 1)) : 0),
+  ...(a.content ? { content: a.content, status: 'ready', progress: 100 } : a.remote ? { remote: a.remote, status: 'uploading', progress: 0 } : { status: 'metadata', progress: 0 }),
+}));

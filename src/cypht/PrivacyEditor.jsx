@@ -62,8 +62,15 @@ export function usePrivacyEditor({ message, defaults, label, labels, onPatch }) 
   }
   function hideAll() { if (!message) return; onPatch(hideEntireMessage(message, label)); reset(); }
   function pickAttachment(i) {
-    const hid = (eff?.hiddenAttachments || []).includes(i);
-    if ((mode === 'lock') !== hid) setPendAtts(x => x.includes(i) ? x.filter(v => v !== i) : [...x, i]);
+    // One tap hides or reveals the file, whichever mode the bar is in (same as the field lock buttons).
+    if (!message || !eff) return;
+    const hidden = eff.hiddenAttachments || [];
+    const attLabels = { ...(eff.hiddenAttachmentLabels || {}) };
+    let atts;
+    if (hidden.includes(i)) { atts = hidden.filter(v => v !== i); delete attLabels[i]; }
+    else { atts = [...hidden, i]; if (label) attLabels[i] = label; else delete attLabels[i]; }
+    onPatch({ reviewed: true, overrides: { ...(message.overrides || {}), attachments: true }, hiddenAttachments: atts, hiddenAttachmentLabels: attLabels });
+    setPendAtts(x => x.filter(v => v !== i));
   }
   const pendingFor = field => mergeRanges(pendRanges.filter(r => r.field === field).map(({ start, end }) => [start, end]));
   const text = (field, value, hiddenRanges, inline = false, title) => <PrivacyText field={field} title={title} text={value} hiddenRanges={hiddenRanges} pendingRanges={pendingFor(field)} labels={labels} onSelect={captureSelection} onToggle={toggleField} mode={mode} onUnpick={(f, a, b) => setPendRanges(rs => rs.filter(r => !(r.field === f && r.start < b && r.end > a)))} inline={inline} />;

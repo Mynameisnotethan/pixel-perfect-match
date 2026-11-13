@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import { buildChatGptPrompt } from '@/cypht/ai-prompt.js';
 import { aiOpenApi } from '../../connectors/ai-openapi.mjs';

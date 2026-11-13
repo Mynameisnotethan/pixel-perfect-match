@@ -16,7 +16,8 @@ services:
     restart: unless-stopped
     labels:
       traefik.enable: "true"
-      traefik.http.routers.lockbox-mail.rule: 'Host(`${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}`) && (PathPrefix(`/oauth/`) || Path(`/api/mailboxes`) || PathPrefix(`/api/mailboxes/`) || PathPrefix(`/api/admin/`) || PathPrefix(`/api/auth/`) || PathPrefix(`/api/ai/`))'
+      traefik.http.routers.lockbox-mail.rule: 'Host(`${LOCKBOX_DOMAIN:-srv1790211.hstgr.cloud}`) && (PathPrefix(`/oauth/`) || PathPrefix(`/api/`))'
+      traefik.http.routers.lockbox-mail.priority: "100"
       traefik.http.routers.lockbox-mail.entrypoints: websecure
       traefik.http.routers.lockbox-mail.tls.certresolver: ${LOCKBOX_TLS_RESOLVER:-letsencrypt}
       traefik.http.routers.lockbox-mail.service: lockbox-mail

@@ -31,7 +31,7 @@ describe("docker-compose.yml is deployable from a bare URL", () => {
   });
 
   it("routes sign-in and mailbox paths to the mail backend through Hostinger's Traefik", () => {
-    expect(serviceBlock("mail")).toMatch(/PathPrefix\(`\/api\/auth\/`\)/);
+    expect(serviceBlock("mail")).toMatch(/PathPrefix\(`\/api\/`\)/);
     expect(serviceBlock("mail")).toMatch(/PathPrefix\(`\/oauth\/`\)/);
     expect(readFileSync("Dockerfile.proxy", "utf8")).toMatch(/COPY deploy\/Caddyfile \/etc\/caddy\/Caddyfile/);
   });

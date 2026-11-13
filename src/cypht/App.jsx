@@ -368,7 +368,7 @@ export default function App() {
           <li><button className="nav-item-button add-account-link" onClick={() => setModal({ type: 'mailbox' })}><Icon name="plus-circle" className="menu-icon" /><span className="nav-label">Add mailbox</span></button></li>
         </ul>}
         {group('feeds', 'Feed')}{groups.feeds && <ul className="folders">{nav('feeds', 'News feeds', 'rss')}</ul>}
-        {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Site', 'gear-wide-connected')}{nav('ai', 'AI Access', 'lock-fill')}{nav('save', 'Save', 'download')}</ul>}
+        {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Settings', 'gear-wide-connected')}{nav('ai', 'AI Access', 'lock-fill')}{nav('save', 'Save', 'download')}</ul>}
         <div className="sidebar-footer">{!LIVE && <button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button>}<button onClick={() => LIVE ? refreshLive() : notify('Preview is up to date. Real mail sync is not connected.')} title={LIVE ? 'Refresh mail' : 'Reload preview'}><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button>{auth.web && <button onClick={() => auth.signOut()} title="Sign out"><Icon name="box-arrow-right" /><span className="nav-label"> Sign out</span></button>}<button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
       </div></nav>
       <main className="content_cell" id="main-content">

@@ -49,7 +49,16 @@ export function AuthProvider({ children }) {
     refresh: () => setNonce(n => n + 1),
     signIn: async (username, password) => { const s = await bridge.login(username, password); setState({ status: 'ok', user: s.user, notice: '' }); },
     createAdmin: async body => { await bridge.setup(body); setState({ status: 'needs-login', user: null, notice: 'Lockbox is set up. Sign in with the account you just created.' }); },
-    signOut: async () => { await bridge.logout(); setState({ status: 'needs-login', user: null, notice: '' }); },
+    signOut: async () => {
+      await bridge.logout();
+      // Do not leave one person's cached mail or drafts available to the next
+      // person who signs in on a shared browser.
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('lockbox-live:v1:')) localStorage.removeItem(key);
+      }
+      setState({ status: 'needs-login', user: null, notice: '' });
+    },
   }), [state, web, nonce]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

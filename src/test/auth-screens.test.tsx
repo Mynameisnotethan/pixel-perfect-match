@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 // @ts-expect-error - original JavaScript source has no type declarations
-import { AuthProvider, AuthGate } from "@/cypht/AuthScreens.jsx";
+import { AuthProvider, AuthGate, useAuth } from "@/cypht/AuthScreens.jsx";
 
 /** Installs a fake self-hosted server the way the Docker build's bridge sees one. */
 function server(over: Record<string, unknown> = {}) {
@@ -84,6 +84,23 @@ describe("sign-in screen", () => {
     expect(await screen.findByText(/could not reach its server/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByText(/could not reach its server/);
+  });
+});
+
+describe("sign-out", () => {
+  it("removes cached live mail but leaves preview data alone", async () => {
+    server({ session: vi.fn(async () => ({ status: "ok", user: "owner" })) });
+    localStorage.setItem("lockbox-live:v1:messages", "private");
+    localStorage.setItem("cypht-preview:v1:messages", "sample");
+    function SignOut() {
+      const auth = useAuth();
+      return <button onClick={() => auth.signOut()}>Sign out</button>;
+    }
+    render(<AuthProvider><AuthGate><SignOut /></AuthGate></AuthProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+    await screen.findByText("Sign in to Lockbox");
+    expect(localStorage.getItem("lockbox-live:v1:messages")).toBeNull();
+    expect(localStorage.getItem("cypht-preview:v1:messages")).toBe("sample");
   });
 });
 

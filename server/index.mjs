@@ -8,6 +8,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { createPkce, buildAuthUrl, exchangeCode, stateMatches, ensureFresh, ReconnectRequired } from '../connectors/oauth.mjs';
 import { mail, upsertMailbox } from '../connectors/mail.mjs';
+import { normalizeOutgoing } from '../connectors/outgoing.mjs';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { createImapClient, normalizeImap } from '../connectors/imap.mjs';
@@ -73,7 +74,19 @@ const pending = new Map(); // state -> { verifier, provider, user, at }
 // ---- request helpers
 const publicBox = ({ tokens, authClientId, imap: settings, ...b }) => (settings ? { ...b, settings: { username: settings.username, name: settings.name, imap: settings.imap, smtp: settings.smtp, hasPassword: !!settings.password } } : b);
 const send = (res, status, body, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(body === undefined ? '' : JSON.stringify(body)); };
-const readJson = req => new Promise((ok, bad) => { let s = ''; req.on('data', c => { s += c; if (s.length > 1e6) req.destroy(); }); req.on('end', () => { try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } }); });
+const readJson = (req, limit = 1e6) => new Promise((ok, bad) => {
+  let s = '';
+  let size = 0;
+  let done = false;
+  req.on('data', c => {
+    if (done) return;
+    size += c.length;
+    if (size > limit) { done = true; bad(Object.assign(new Error('request_too_large'), { status: 413 })); return; }
+    s += c;
+  });
+  req.on('end', () => { if (done) return; try { ok(JSON.parse(s || '{}')); } catch (e) { bad(e); } });
+  req.on('error', bad);
+});
 const cookiesOf = req => Object.fromEntries((req.headers.cookie || '').split(';').map(p => { const i = p.indexOf('='); return i < 0 ? [] : [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())]; }).filter(e => e.length));
 // Caddy ends TLS and tells us over X-Forwarded-Proto, so cookies get the Secure flag in production
 // while a plain-http test server can still set them.
@@ -229,9 +242,8 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && !id) return send(res, 200, ((await load())[user] || []).map(publicBox));
     if (req.method === 'GET' && action === 'inbox') return send(res, 200, await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)));
     if (req.method === 'POST' && action === 'send') {
-      const { to, subject = '', body = '' } = await readJson(req);
-      if (typeof to !== 'string' || !/^[^\s@,]+@[^\s@,]+(\s*,\s*[^\s@,]+@[^\s@,]+)*$/.test(to) || subject.length > 998 || body.length > 500_000) return send(res, 400, { error: 'invalid_message' });
-      await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.send(b.imap, { to, subject, body }) : mail[b.provider].send(t, b.email, { to, subject, body }));
+      const message = normalizeOutgoing(await readJson(req, 40 * 1024 * 1024));
+      await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.send(b.imap, message) : mail[b.provider].send(t, b.email, message));
       return send(res, 202, { ok: true });
     }
     if (req.method === 'DELETE' && id) { await mutate(db => { db[user] = (db[user] || []).filter(b => b.id !== id); }); return send(res, 204); }

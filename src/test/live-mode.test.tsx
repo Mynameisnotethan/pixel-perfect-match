@@ -12,6 +12,8 @@ describe("real mail mode", () => {
     render(<App />);
     expect(screen.queryByText("Sarah Chen")).toBeNull();
     expect(await screen.findByText(/Connect Gmail, Outlook or any IMAP email/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset sample data" })).toBeNull();
     delete (window as any).lockboxMailboxes;
   });
 });

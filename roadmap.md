@@ -62,3 +62,18 @@
 - [x] AI Access: multiple per-account API keys + card layout
 - [x] Keep every Hide by default switch on for new, incomplete, and reset settings while preserving deliberate exceptions
 - [x] Remove the Hide by default Save button; save each unlocked change automatically
+
+# Interface and quality audit
+
+- [x] Rename the Servers sidebar button to Mailboxes (plural, no apostrophe)
+- [x] Run the full automated test suite and static lint audit; fix regressions found
+- [x] Smoke-test navigation, mailbox connection, Compose, privacy controls, and AI Access in the browser
+- [x] Record any remaining checks that require real provider accounts, Hostinger, or Windows
+- [x] Fix account-folder navigation for provider IDs containing colons
+- [x] Keep live mode free of sample reset/export paths; clear live browser caches on sign-out
+- [x] Reconcile live refreshes, wire the Refresh button, and await credential removal before disconnect succeeds
+- [x] Save privacy-rule changes immediately in order with retry instead of a cancellable debounce
+- [x] Apply sent-mail privacy defaults inside Compose and block unsupported live scheduling explicitly
+- [x] Preserve To/Cc/Bcc, plain/HTML bodies, and attachments through Gmail, Microsoft Graph, and SMTP
+- [x] Allow the send endpoint to carry the composer's 25 MB attachment allowance without relaxing other request limits
+- [x] Replace remaining Cypht browser-tab metadata and the Servers page heading with Lockbox/Mailboxes

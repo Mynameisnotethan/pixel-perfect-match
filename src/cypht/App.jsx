@@ -50,11 +50,12 @@ function Dialog({ title, onClose, children, wide = false }) {
 function formatDate(value) { return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value)); }
 function downloadText(name, text, type = 'text/plain') { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', bodyHtml: '', attachments: [] }, account);
-const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Servers', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
+const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Mailboxes', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 import MailboxDialog from './MailboxDialog.jsx';
 import { useAuth } from './AuthScreens.jsx';
 import { liveBridge, inboxToMessages, liveAccount, connectionInfo } from './mailbox-live.js';
+import { parseAccountView } from './mailbox-view.js';
 import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId, MAILBOX_PROVIDERS, STATUS_TEXT } from './mailbox-demo.js';
 
 export default function App() {
@@ -128,6 +129,7 @@ export default function App() {
   const notify = text => setToast(text);
   const go = next => { setView(next); setCurrent(null); setSelected([]); setSidebar(false); setQuery(''); };
   const accountFor = id => accounts.find(a => a.id === id);
+  const selectedAccountView = parseAccountView(view, accounts);
   const updateMessages = (ids, patch) => setMessages(all => all.map(m => ids.includes(m.id) ? { ...m, ...patch } : m));
   const folderCounts = key => messages.filter(m => key === 'unread' ? m.folder === 'inbox' && !m.read : key === 'flagged' ? m.flagged && !['trash', 'junk'].includes(m.folder) : m.folder === key).length;
   const messageTime = value => new Date(value).toLocaleString('en', { timeZone: settings.timezone });
@@ -136,7 +138,7 @@ export default function App() {
     return messages.filter(m => {
       if (sourceIds && !sourceIds.includes(m.account)) return false;
       let matches = true;
-      if (view.startsWith('account:')) { const [, id, folder = 'inbox'] = view.split(':'); matches = m.account === id && m.folder === folder; }
+      if (selectedAccountView) matches = m.account === selectedAccountView.id && m.folder === selectedAccountView.folder;
       else if (view === 'everything') matches = m.folder === 'inbox';
       else if (view === 'unread') matches = m.folder === 'inbox' && !m.read;
       else if (view === 'flagged') matches = m.flagged && !['trash', 'junk'].includes(m.folder);
@@ -144,14 +146,14 @@ export default function App() {
       else matches = m.folder === view;
       return matches && (!needle || [m.subject, m.body, m.sender, m.email, m.to].filter(Boolean).join(' ').toLowerCase().includes(needle));
     }).sort((a, b) => sort === 'oldest' ? Date.parse(a.date) - Date.parse(b.date) : sort === 'sender' ? a.sender.localeCompare(b.sender) : sort === 'subject' ? a.subject.localeCompare(b.subject) : Date.parse(b.date) - Date.parse(a.date));
-  }, [messages, view, query, sort, sourceIds]);
+  }, [messages, view, query, sort, sourceIds, selectedAccountView]);
   const pages = Math.max(1, Math.ceil(visible.length / Number(settings.pageSize)));
   const activePage = Math.min(page, pages);
   const pageMessages = visible.slice((activePage - 1) * Number(settings.pageSize), activePage * Number(settings.pageSize));
   const active = messages.find(m => m.id === current);
   const pv = usePrivacyEditor({ message: active, defaults: aiDefaults, label: hideLabel, labels, onPatch: patch => updateMessages([active.id], patch) });
   const mailboxView = !['ai', 'contacts', 'calendar', 'servers', 'settings', 'save', 'feeds'].includes(view);
-  const title = view.startsWith('account:') ? `${accountFor(view.split(':')[1])?.name || 'Account'} › ${(view.split(':')[2] || 'inbox').replace(/^./, c => c.toUpperCase())}` : titles[view] || 'Everything';
+  const title = selectedAccountView ? `${accountFor(selectedAccountView.id)?.name || 'Account'} › ${selectedAccountView.folder.replace(/^./, c => c.toUpperCase())}` : titles[view] || 'Everything';
   const openMessage = message => {
     if (message.folder === 'drafts') {
       const restored = normalizeDraft({ ...message, minimized: false, saveState: 'saved' }, message.account);
@@ -167,7 +169,12 @@ export default function App() {
     try {
       const incoming = inboxToMessages(box, await bridge.sync(box.id)).map(m => ({ ...m, ...(serverRules.current?.[m.id] || {}) }));
       setAccounts(all => [...all.filter(a => a.id !== box.id), liveAccount(box)]);
-      setMessages(all => { const known = new Set(all.map(m => m.id)); return [...incoming.filter(m => !known.has(m.id)), ...all]; });
+      setMessages(all => {
+        const incomingIds = new Set(incoming.map(m => m.id));
+        // Reconcile changed provider messages, remove mail no longer in this inbox,
+        // and retain local drafts/sent copies that are not part of the inbox response.
+        return [...incoming, ...all.filter(m => !incomingIds.has(m.id) && !(m.account === box.id && m.folder === 'inbox'))];
+      });
       setMailboxes(list => upsertMailbox(list, { ...box, status: 'connected' })); setSourceIds(null);
     } catch (e) {
       setMailboxes(list => upsertMailbox(list, { ...box, status: e.message?.includes('reconnect_required') ? 'reconnect' : 'connected' }));
@@ -194,13 +201,26 @@ export default function App() {
       setPrivacyLoaded(true);
     }).catch(e => notify(`Could not load your hide-from-AI settings: ${e.message}`));
   }, []);
+  const privacyQueue = useRef(Promise.resolve());
   useEffect(() => {
     const p = liveBridge()?.privacy; if (!p || !privacyLoaded) return;
-    const t = setTimeout(() => {
-      serverRules.current = { ...serverRules.current, ...rulesFrom(messages.filter(m => m.folder !== 'drafts')) };
-      p.put({ rules: serverRules.current, defaults: aiDefaults, labels }).catch(e => notify(`Hide-from-AI changes were not saved: ${e.message}`));
-    }, 800);
-    return () => clearTimeout(t);
+    let active = true;
+    let retry;
+    serverRules.current = { ...serverRules.current, ...rulesFrom(messages.filter(m => m.folder !== 'drafts')) };
+    const doc = { rules: serverRules.current, defaults: aiDefaults, labels };
+    const save = async () => {
+      if (!active) return;
+      try { await p.put(doc); }
+      catch (e) {
+        if (!active) return;
+        notify(`Hide-from-AI changes were not saved. Retrying: ${e.message}`);
+        retry = setTimeout(() => { privacyQueue.current = privacyQueue.current.then(save); }, 2000);
+      }
+    };
+    // Serialize writes so an older, slower response can never overwrite a newer
+    // privacy decision. A restrictive change is sent immediately, not debounced.
+    privacyQueue.current = privacyQueue.current.then(save);
+    return () => { active = false; clearTimeout(retry); };
   }, [messages, aiDefaults, labels, privacyLoaded]);
   function refreshLive() {
     const bridge = liveBridge(); if (!bridge) return;
@@ -209,6 +229,8 @@ export default function App() {
       const ids = new Set(list.map(b => b.id));
       setMailboxes(l => l.filter(b => ids.has(b.id)));
       setAccounts(all => all.filter(a => ids.has(a.id)));
+      setMessages(all => all.filter(m => ids.has(m.account)));
+      setDrafts(all => all.filter(d => ids.has(d.account)));
       list.forEach(box => box.status === 'reconnect' ? setMailboxes(l => upsertMailbox(l, box)) : syncLive(box));
     }).catch(e => notify(`Could not load your mailboxes: ${e.message}`));
   }
@@ -248,12 +270,17 @@ export default function App() {
     setSourceIds(null); notify(`${settings.email} connected (demo).`);
     return box;
   }
-  function disconnectMailbox(box) {
-    liveBridge()?.disconnect(box.id).catch(() => {});
-    setMailboxes(list => removeMailbox(list, box.id));
-    setAccounts(all => all.filter(a => a.id !== box.id));
-    setMessages(all => all.filter(m => m.account !== box.id));
-    setSourceIds(null); notify(`${box.email} disconnected.`);
+  async function disconnectMailbox(box) {
+    try {
+      await liveBridge()?.disconnect(box.id);
+      setMailboxes(list => removeMailbox(list, box.id));
+      setAccounts(all => all.filter(a => a.id !== box.id));
+      setMessages(all => all.filter(m => m.account !== box.id));
+      setDrafts(all => all.filter(d => d.account !== box.id));
+      setSourceIds(null); notify(`${box.email} disconnected.`);
+    } catch (e) {
+      notify(`Could not disconnect ${box.email}: ${e.message}. Your mailbox and credentials were kept.`);
+    }
   }
   function compose(kind = 'new', message = null, contact = null) {
     const account = message?.account || accounts[0]?.id || '';
@@ -291,9 +318,18 @@ export default function App() {
     const id = draft.id;
     if (pendingSends.some(item => item.message.id === id) || messages.some(item => item.id === id && ['sent', 'scheduled'].includes(item.folder))) throw new Error('This message is already queued. Duplicate sending was prevented.');
     const account = accountFor(draft.account);
+    if (account?.live && scheduledAt) throw new Error('Scheduled sending is not available for connected mailboxes yet. Your draft is preserved; use Send to deliver now.');
     if (account?.live && !scheduledAt) {
       const sent = draftMessage(draft, account, 'sent');
-      await liveBridge().send(account.id, { to: sent.to, subject: draft.subject || '', body: htmlToText(sent.bodyHtml || '') });
+      await liveBridge().send(account.id, {
+        to: sent.to,
+        cc: sent.cc,
+        bcc: (draft.recipients?.bcc || []).map(item => item.email).join(', '),
+        subject: draft.subject || '',
+        body: htmlToText(sent.bodyHtml || ''),
+        html: sent.bodyHtml || '',
+        attachments: sent.attachments || [],
+      });
       setMessages(all => [{ ...sent, date: new Date().toISOString() }, ...all.filter(item => item.id !== id)]);
       setDrafts(all => all.filter(item => item.id !== id)); notify(`Sent from ${account.email}.`);
       return;
@@ -331,7 +367,7 @@ export default function App() {
     if (!popup) notify('The browser blocked the compose window. Allow pop-ups and try again.');
   }
   function remove(ids) { if (!ids.length) return; if (settings.confirmDelete) setModal({ type: 'delete', ids }); else move(ids, 'trash'); }
-  function move(ids, folder) { updateMessages(ids, { folder }); setSelected([]); if (ids.includes(current)) setCurrent(null); notify(`${ids.length} sample message${ids.length === 1 ? '' : 's'} moved to ${folder}.`); }
+  function move(ids, folder) { updateMessages(ids, { folder }); setSelected([]); if (ids.includes(current)) setCurrent(null); notify(LIVE ? `Moved to ${folder} in Lockbox only. Your mail provider was not changed.` : `${ids.length} sample message${ids.length === 1 ? '' : 's'} moved to ${folder}.`); }
   const nav = (key, label, icon, count = 0) => <li key={key} className={view === key ? 'selected_menu' : ''}><button className="nav-item-button" onClick={() => go(key)} title={label}><Icon name={icon} className="menu-icon" /><span className="nav-label">{label}</span>{count > 0 && <span className="nav-count">{count}</span>}</button></li>;
   const group = (key, label) => <button className="src_name section-toggle" aria-expanded={groups[key]} onClick={() => setGroups(g => ({ ...g, [key]: !g[key] }))}>{label}<Icon name={groups[key] ? 'chevron-up' : 'chevron-down'} /></button>;
   const privacyStatusLabels = { grey: 'not reviewed', green: 'fully visible to AI', yellow: 'partly hidden from AI', red: 'fully hidden from AI' };
@@ -368,14 +404,14 @@ export default function App() {
           <li><button className="nav-item-button add-account-link" onClick={() => setModal({ type: 'mailbox' })}><Icon name="plus-circle" className="menu-icon" /><span className="nav-label">Add mailbox</span></button></li>
         </ul>}
         {group('feeds', 'Feed')}{groups.feeds && <ul className="folders">{nav('feeds', 'News feeds', 'rss')}</ul>}
-        {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Servers', 'pc-display-horizontal')}{nav('settings', 'Settings', 'gear-wide-connected')}{nav('ai', 'AI Access', 'lock-fill')}{nav('save', 'Save', 'download')}</ul>}
+        {group('settings', 'Settings')}{groups.settings && <ul className="folders">{nav('servers', 'Mailboxes', 'pc-display-horizontal')}{nav('settings', 'Settings', 'gear-wide-connected')}{nav('ai', 'AI Access', 'lock-fill')}{!LIVE && nav('save', 'Save', 'download')}</ul>}
         <div className="sidebar-footer">{!LIVE && <button onClick={() => setModal({ type: 'reset' })} title="Reset sample data"><Icon name="arrow-counterclockwise" /><span className="nav-label"> Reset</span></button>}<button onClick={() => LIVE ? refreshLive() : notify('Preview is up to date. Real mail sync is not connected.')} title={LIVE ? 'Refresh mail' : 'Reload preview'}><Icon name="arrow-clockwise" /><span className="nav-label"> Reload</span></button>{auth.web && <button onClick={() => auth.signOut()} title="Sign out"><Icon name="box-arrow-right" /><span className="nav-label"> Sign out</span></button>}<button aria-label="Toggle sidebar width" title="Toggle sidebar width" onClick={() => setCollapsed(v => !v)}><Icon name="list" /></button></div>
       </div></nav>
       <main className="content_cell" id="main-content">
         {mailboxView && <>
           <div className="content_title inbox-heading">
             <div className="heading-main"><input type="checkbox" className="form-check-input" aria-label="Select all visible messages" checked={pageMessages.length > 0 && pageMessages.every(m => selected.includes(m.id))} onChange={e => setSelected(e.target.checked ? pageMessages.map(m => m.id) : [])} /><h1>{title}</h1><span className="list-meta">{visible.length} messages · {accounts.length} sources</span></div>
-            <div className="heading-controls"><select className="form-select form-select-sm" aria-label="Sort messages" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Arrival Date ↓</option><option value="oldest">Arrival Date ↑</option><option value="sender">From A–Z</option><option value="subject">Subject A–Z</option></select><Tool icon="arrow-clockwise" label="Refresh messages" onClick={() => notify('Preview refreshed. Real mail sync is not connected.')} /><details className="sources-menu"><summary title="Sources" aria-label="Choose sources"><Icon name="folder-fill" /></summary><div className="sources-popover"><strong>Sources</strong>{accounts.map(a => <label key={a.id}><input type="checkbox" checked={!sourceIds || sourceIds.includes(a.id)} onChange={e => setSourceIds(old => e.target.checked ? [...(old || accounts.map(a => a.id)), a.id].filter((v, i, arr) => arr.indexOf(v) === i) : (old || accounts.map(a => a.id)).filter(id => id !== a.id))} /><span className="account-dot" style={{ background: a.color }} />{a.name}</label>)}<button onClick={() => setSourceIds(null)}>Show all sources</button></div></details><Tool icon="gear-wide" label="Configure view" onClick={() => go('settings')} /></div>
+            <div className="heading-controls"><select className="form-select form-select-sm" aria-label="Sort messages" value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Arrival Date ↓</option><option value="oldest">Arrival Date ↑</option><option value="sender">From A–Z</option><option value="subject">Subject A–Z</option></select><Tool icon="arrow-clockwise" label="Refresh messages" onClick={() => LIVE ? refreshLive() : notify('Preview refreshed. Real mail sync is not connected.')} /><details className="sources-menu"><summary title="Sources" aria-label="Choose sources"><Icon name="folder-fill" /></summary><div className="sources-popover"><strong>Sources</strong>{accounts.map(a => <label key={a.id}><input type="checkbox" checked={!sourceIds || sourceIds.includes(a.id)} onChange={e => setSourceIds(old => e.target.checked ? [...(old || accounts.map(a => a.id)), a.id].filter((v, i, arr) => arr.indexOf(v) === i) : (old || accounts.map(a => a.id)).filter(id => id !== a.id))} /><span className="account-dot" style={{ background: a.color }} />{a.name}</label>)}<button onClick={() => setSourceIds(null)}>Show all sources</button></div></details><Tool icon="gear-wide" label="Configure view" onClick={() => go('settings')} /></div>
           </div>
           {selected.length > 0 && <div className="bulk-toolbar"><span>{selected.length} selected</span><Tool icon="envelope-open" label="Mark selected as read" onClick={() => { updateMessages(selected, { read: true }); setSelected([]); }} /><Tool icon="envelope" label="Mark selected as unread" onClick={() => { updateMessages(selected, { read: false }); setSelected([]); }} /><Tool icon="flag" label="Flag selected" onClick={() => { updateMessages(selected, { flagged: true }); setSelected([]); }} /><Tool icon="archive" label="Archive selected" onClick={() => move(selected, 'archive')} /><Tool icon="inbox" label="Move selected to Inbox" onClick={() => move(selected, 'inbox')} /><Tool icon="trash" label="Delete selected" onClick={() => remove(selected)} /><button className="btn btn-sm btn-link" onClick={() => setSelected([])}>Cancel</button></div>}
           {query && <div className="search-summary">Results for “{query}”<button onClick={() => setQuery('')}>Clear search <Icon name="x" /></button></div>}
@@ -411,13 +447,13 @@ export default function App() {
           <div className="ai-card" id="ai-hide"><AiDefaults value={aiDefaults} onSave={setAiDefaults} onNotify={notify} /></div>
           <div className="ai-card" id="ai-labels"><h2>Hidden text labels</h2><p className="muted-copy">The AI sees the label name, like “[hidden: Financial info]”, but never the text.</p><LabelManager labels={labels} setLabels={setLabels} onNotify={notify} onAfterChange={next => { if (hideLabel && !next.some(l => l.id === hideLabel)) setHideLabel(''); }} /></div>
                   </section>}
-        {view === 'save' && <section className="page-content settings-content"><h2>Save Settings</h2><p>Your preview changes are saved automatically in this browser. Export the sample accounts, messages, contacts, events, and settings as a JSON file.</p><p className="muted-copy">This export contains preview data only. Keep real credentials out of the preview.</p><button className="btn btn-primary" onClick={() => downloadText('cypht-preview-data.json', JSON.stringify({ accounts, messages, contacts, events, settings }, null, 2), 'application/json')}><Icon name="download" /> Export preview data</button><button className="btn btn-outline-secondary ms-2" onClick={() => setModal({ type: 'reset' })}>Reset sample data</button></section>}
+        {view === 'save' && !LIVE && <section className="page-content settings-content"><h2>Save Settings</h2><p>Your preview changes are saved automatically in this browser. Export the sample accounts, messages, contacts, events, and settings as a JSON file.</p><p className="muted-copy">This export contains preview data only. Keep real credentials out of the preview.</p><button className="btn btn-primary" onClick={() => downloadText('cypht-preview-data.json', JSON.stringify({ accounts, messages, contacts, events, settings }, null, 2), 'application/json')}><Icon name="download" /> Export preview data</button><button className="btn btn-outline-secondary ms-2" onClick={() => setModal({ type: 'reset' })}>Reset sample data</button></section>}
         {view === 'calendar' && <section className="page-content calendar-content"><div className="calendar-toolbar"><div><Tool icon="chevron-left" label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} /><h2>{month.toLocaleDateString('en', { month: 'long', year: 'numeric' })}</h2><Tool icon="chevron-right" label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} /></div><button className="btn btn-primary btn-sm" onClick={() => setModal({ type: 'event' })}><Icon name="plus" /> Add event</button></div><div className="calendar-grid">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div className="day-heading" key={d}>{d}</div>)}{Array.from({ length: Math.ceil((month.getDay() + new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()) / 7) * 7 }, (_, i) => { const day = i - month.getDay() + 1; const valid = day > 0 && day <= new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate(); const date = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; return <div className={`calendar-day ${valid ? '' : 'outside-month'}`} key={i}>{valid && <><button className="day-number" aria-label={`Add event on ${date}`} onClick={() => setModal({ type: 'event', date })}>{day}</button>{events.filter(e => e.date === date).map(e => <button key={e.id} className="calendar-event" title={`${e.title} ${e.time}`} onClick={() => setModal({ type: 'event-detail', event: e })}>{e.time} {e.title}</button>)}</>}</div>; })}</div><p className="muted-copy mt-3">Local preview calendar. Events are not synced to a mail provider.</p></section>}
         {view === 'feeds' && <section className="page-content"><div className="empty-state"><Icon name="rss" /><h2>No feeds connected</h2><p>Feed retrieval requires a backend connection. You can edit this screen in the preview.</p></div></section>}
       </main>
     </div>
 
-    <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} labels={labels} onAddLabel={l => setLabels(x => [...x, l])} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
+    <div className="composer-stack" aria-label="Open composers">{drafts.filter(item => !popupDraftId || item.id === popupDraftId).map((item, index) => <Compose key={item.id} draft={item} defaults={aiDefaults} labels={labels} onAddLabel={l => setLabels(x => [...x, l])} index={index} accounts={accounts} contacts={contacts} settings={composeSettings} onSettings={setComposeSettings} onChange={updateDraft} onClose={closeDraft} onDiscard={discardDraft} onSend={sendDraft} onPopout={popoutDraft} />)}</div>
 
     {modal?.type === 'mailbox' && <Dialog title={modal.edit ? `Edit ${modal.edit.email}` : 'Add mailbox'} onClose={() => setModal(null)}><MailboxDialog key={modal.edit?.id || 'new'} editBox={modal.edit} onImapTest={testImap} onImapSave={saveImap} mailboxes={mailboxes} onConnect={connectMailbox} onReconnect={(b, ui) => connectMailbox(b.provider, b.email, ui)} onExpire={b => setMailboxes(list => setStatus(list, b.id, 'reconnect'))} onDisconnect={disconnectMailbox} onClose={() => setModal(null)} /></Dialog>}
     {modal?.type === 'account' && <AccountDialog account={modal.account} onClose={() => setModal(null)} onSave={account => { setAccounts(all => modal.account ? all.map(a => a.id === account.id ? account : a) : [...all, account]); setSourceIds(null); setModal(null); notify('Sample account saved. No server connection was made.'); }} />}
@@ -426,7 +462,7 @@ export default function App() {
     {modal?.type === 'event-detail' && <Dialog title={modal.event.title} onClose={() => setModal(null)}><p>{modal.event.date} · {modal.event.time || 'All day'}</p><p className="my-3">{modal.event.notes}</p><button className="btn btn-outline-danger" onClick={() => { setEvents(all => all.filter(e => e.id !== modal.event.id)); setModal(null); }}>Remove event</button></Dialog>}
     {modal?.type === 'delete' && <Dialog title="Move to Trash?" onClose={() => setModal(null)}><p>Move {modal.ids.length} sample message{modal.ids.length === 1 ? '' : 's'} to Trash? You can restore them later.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-danger" onClick={() => { move(modal.ids, 'trash'); setModal(null); }}>Move to Trash</button></div></Dialog>}
     {modal?.type === 'remove-account' && <Dialog title="Remove sample account?" onClose={() => setModal(null)}><p>Remove {modal.account.email} and its sample messages from this browser?</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-danger" onClick={() => { const id = modal.account.id; setAccounts(all => all.filter(a => a.id !== id)); setMessages(all => all.filter(m => m.account !== id)); setSourceIds(null); setModal(null); go('servers'); }}>Remove</button></div></Dialog>}
-    {modal?.type === 'reset' && <Dialog title="Reset preview data?" onClose={() => setModal(null)}><p>This resets sample messages, accounts, drafts, contacts, calendar events, and settings in this browser. It does not affect a real mailbox.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={() => { setAccounts(initialAccounts); setMessages(seedMessages()); setContacts(initialContacts); setEvents([]); setSettings(initialSettings); setAiDefaults(freshDefaults()); setDrafts([]); setPendingSends([]); setUndoSend(null); setDiscarded(null); setSourceIds(null); setModal(null); go('everything'); notify('Sample data reset.'); }}>Reset sample data</button></div></Dialog>}
+    {modal?.type === 'reset' && !LIVE && <Dialog title="Reset preview data?" onClose={() => setModal(null)}><p>This resets sample messages, accounts, drafts, contacts, calendar events, and settings in this browser. It does not affect a real mailbox.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={() => { setAccounts(initialAccounts); setMessages(seedMessages()); setContacts(initialContacts); setEvents([]); setSettings(initialSettings); setAiDefaults(freshDefaults()); setDrafts([]); setPendingSends([]); setUndoSend(null); setDiscarded(null); setSourceIds(null); setModal(null); go('everything'); notify('Sample data reset.'); }}>Reset sample data</button></div></Dialog>}
     {modal?.type === 'about' && <Dialog title="About this preview" onClose={() => setModal(null)}><p>This is an editable frontend recreation of Cypht. It reuses Cypht's core stylesheet and default theme, with React components for browser preview.</p><p className="mt-3">Messages and accounts are samples saved in this browser. Sending, provider sign-in, mail synchronization, and feed retrieval are not connected.</p><p className="mt-3">The original PHP source is included in the download under reference/. It does not execute in this preview. This frontend is not a complete 1:1 functional port.</p><p className="mt-3">Cypht source and reused assets: LGPL-2.1. See LICENSE and THIRD_PARTY_NOTICES.md.</p></Dialog>}
     {toast && <div className="preview-toast" role="status"><Icon name="info-circle" /><span>{toast}</span>{undoSend && pendingSends.some(item => item.message.id === undoSend) && <button className="toast-action" onClick={() => undoPending(undoSend)}>Undo send</button>}{discarded && <button className="toast-action" onClick={() => { const restored = normalizeDraft(discarded, discarded.account); setDrafts(all => [...all.filter(item => item.id !== restored.id), restored]); setDiscarded(null); setToast(''); }}>Undo discard</button>}<button aria-label="Dismiss notification" onClick={() => { setToast(''); setDiscarded(null); }}><Icon name="x-lg" /></button></div>}
   </div>;

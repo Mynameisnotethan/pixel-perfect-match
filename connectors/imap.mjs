@@ -3,6 +3,7 @@
 // so a signed-in user cannot make the server probe its own network.
 import net from 'node:net';
 import dns from 'node:dns/promises';
+import { mimeAttachments, normalizeOutgoing } from './outgoing.mjs';
 
 export const IMAP_PRESETS = {
   yahoo: { name: 'Yahoo Mail', imap: { host: 'imap.mail.yahoo.com', port: 993, security: 'ssl' }, smtp: { host: 'smtp.mail.yahoo.com', port: 465, security: 'ssl' } },
@@ -85,9 +86,19 @@ export function createImapClient({ ImapFlow, nodemailer, allowPrivate = false })
       } finally { await c.logout().catch(() => {}); }
       return out.reverse();
     }),
-    send: wrap(async (s, { to, subject, body }) => {
+    send: wrap(async (s, input) => {
+      const msg = normalizeOutgoing(input);
       await assertPublic(s.smtp.host, allowPrivate);
-      await transport(s).sendMail({ from: s.name ? `"${s.name.replace(/"/g, '')}" <${s.email}>` : s.email, to, subject, text: body });
+      await transport(s).sendMail({
+        from: s.name ? `"${s.name.replace(/"/g, '')}" <${s.email}>` : s.email,
+        to: msg.to,
+        cc: msg.cc,
+        bcc: msg.bcc,
+        subject: msg.subject,
+        text: msg.body,
+        html: msg.html || undefined,
+        attachments: mimeAttachments(msg.attachments),
+      });
       return null;
     }),
   };

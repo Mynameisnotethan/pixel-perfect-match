@@ -63,6 +63,11 @@
 - [x] Keep every Hide by default switch on for new, incomplete, and reset settings while preserving deliberate exceptions
 - [x] Remove the Hide by default Save button; save each unlocked change automatically
 
+# AI API security verification
+
+- [x] Verify real HTTP API-key authentication, read-only behavior, no-store responses, and revocation
+- [x] Verify serialized API responses contain no hidden or unreviewed content
+
 # Interface and quality audit
 
 - [x] Rename the Servers sidebar button to Mailboxes (plural, no apostrophe)

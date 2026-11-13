@@ -121,6 +121,23 @@ describe("self-hosted sign-in and first-run setup", () => {
     expect((await server.call("/api/mailboxes", {}, jar)).status).toBe(401);
   });
 
+  it("serves the AI endpoint only with a valid account API key", async () => {
+    const login = await server.call("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "admin", password: PASSWORD }) });
+    const jar = `lockbox_session=${tokenOf(login)}; lockbox_csrf=${csrfOf(login)}`;
+    const created = await server.call("/api/ai/keys", { method: "POST", headers: { "content-type": "application/json", "x-lockbox-csrf": csrfOf(login) }, body: JSON.stringify({ name: "Security check" }) }, jar);
+    expect(created.status).toBe(201);
+    const key = (await created.json()).key as string;
+    expect((await server.call("/api/ai/v1/messages")).status).toBe(401);
+    expect((await server.call("/api/ai/v1/messages", { headers: { authorization: "Bearer lbx_wrongwrongwrongwrongwrong" } })).status).toBe(401);
+    const allowed = await server.call("/api/ai/v1/messages", { headers: { authorization: `Bearer ${key}` } });
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get("cache-control")).toBe("no-store");
+    expect(await allowed.json()).toEqual({ messages: [] });
+    expect((await server.call("/api/ai/v1/messages", { method: "POST", headers: { authorization: `Bearer ${key}` } })).status).toBe(405);
+    expect((await server.call(`/api/ai/keys/${encodeURIComponent((await (await server.call("/api/ai/keys", {}, jar)).json())[0].id)}`, { method: "DELETE", headers: { "x-lockbox-csrf": csrfOf(login) } }, jar)).status).toBe(204);
+    expect((await server.call("/api/ai/v1/messages", { headers: { authorization: `Bearer ${key}` } })).status).toBe(401);
+  });
+
   it("keeps sessions, accounts and a closed setup across a restart", async () => {
     const res = await server.call("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "admin", password: PASSWORD }) });
     const jar = `lockbox_session=${tokenOf(res)}`;

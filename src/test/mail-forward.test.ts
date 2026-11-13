@@ -25,7 +25,7 @@ describe("web container forwards mail-service requests", () => {
       body: '{"name":"k"}',
     });
     const res = await forwardToMail(req, "http://mail:3000", fetchImpl as unknown as typeof fetch);
-    expect(fetchImpl.mock.calls[0][0]).toBe("http://mail:3000/api/ai/keys?x=1");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://mail:3000/api/ai/keys?x=1");
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ ok: true });
   });

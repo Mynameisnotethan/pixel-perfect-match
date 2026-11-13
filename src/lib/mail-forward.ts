@@ -6,7 +6,7 @@ const HOP_BY_HOP = ["host", "connection", "keep-alive", "transfer-encoding", "up
 
 export function mailUpstream(): string | null {
   const env = typeof process !== "undefined" ? process.env : undefined;
-  const value = env?.LOCKBOX_MAIL_UPSTREAM?.trim();
+  const value = env?.['LOCKBOX_MAIL_UPSTREAM']?.trim();
   return value ? value.replace(/\/+$/, "") : null;
 }
 
@@ -30,7 +30,7 @@ export async function forwardToMail(
     res = await fetchImpl(upstream + url.pathname + url.search, {
       method: request.method,
       headers,
-      body: hasBody ? await request.arrayBuffer() : undefined,
+      body: hasBody ? await request.arrayBuffer() : null,
       redirect: "manual",
     });
   } catch {

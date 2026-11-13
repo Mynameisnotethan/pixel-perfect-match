@@ -103,3 +103,7 @@ from your repository. `LOCKBOX_IMAGE_TAG` pins a tag instead of `latest`.
 2. Give your agent the address shown there (`https://YOUR-DOMAIN/api/ai/v1/messages`) and send the key as `Authorization: Bearer lbx_...`.
 3. Agents get only emails you have opened in Lockbox. Hidden parts are replaced by their label, for example `[hidden: Financial info]`, and the access is read-only. `GET /api/ai/v1/messages?limit=25&mailbox=<id>` lists emails; `GET /api/ai/v1/messages/<id>` reads one. Message text is the mailbox preview text.
 4. Delete a key on the same page to cut that agent off right away.
+
+## Connect ChatGPT
+
+ChatGPT's normal chat cannot reach your server, so use a Custom GPT Action. In AI Access, click **ChatGPT prompt** next to a key, paste it into ChatGPT, and follow the steps. The action imports `https://YOUR-DOMAIN/api/ai/v1/openapi.json`; paste the key only into the action's Authentication field (API Key, Bearer), never into chat.

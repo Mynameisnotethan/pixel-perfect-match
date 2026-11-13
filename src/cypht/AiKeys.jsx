@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { liveBridge } from './mailbox-live.js';
+import { buildChatGptPrompt } from './ai-prompt.js';
 
 const DEMO_KEY = 'cypht-preview:ai-keys';
 // Preview (no server): keys live in this browser and only the visible tail is remembered.
@@ -46,7 +47,7 @@ export default function AiKeys({ onNotify = () => {} }) {
     {error && <div className="ai-key-error" role="alert">{error}</div>}
     {endpoint ? <div className="ai-endpoint"><strong>Give your AI agent this address and a key</strong><div className="ai-key-copy"><code>{endpoint}/messages</code><button className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(`${endpoint}/messages`); onNotify('Address copied.'); }}><Icon name="clipboard" /> Copy</button></div><p className="muted-copy">Example: <code>curl -H "Authorization: Bearer lbx_…" {endpoint}/messages?limit=10</code>. Agents only get emails you have opened, with hidden parts replaced by their label. They can read, never send or delete.{liveBridge()?.runtime === 'desktop' && ' This address works only on this computer, while Lockbox is open.'}</p></div>
       : demo && <p className="muted-copy ai-endpoint">Demo: AI agents can connect once Lockbox runs on your server or the desktop app.</p>}
-    {keys.length ? <table className="ai-key-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th /></tr></thead><tbody>{keys.map(k => <tr key={k.id}><td data-label="Name">{k.name}</td><td data-label="Key"><code>lbx_••••{k.last4}</code></td><td data-label="Created">{day(k.createdAt)}</td><td data-label="Last used">{day(k.lastUsedAt)}</td><td><button className="btn btn-sm btn-outline-danger" aria-label={`Delete ${k.name}`} onClick={() => remove(k)}><Icon name="trash" /></button></td></tr>)}</tbody></table>
+    {keys.length ? <table className="ai-key-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th /></tr></thead><tbody>{keys.map(k => <tr key={k.id}><td data-label="Name">{k.name}</td><td data-label="Key"><code>lbx_••••{k.last4}</code></td><td data-label="Created">{day(k.createdAt)}</td><td data-label="Last used">{day(k.lastUsedAt)}</td><td className="ai-key-actions">{endpoint && <button className="btn btn-sm btn-outline-secondary" title="Copy a setup prompt for ChatGPT or other agents (does not include the key)" aria-label={`Copy ChatGPT prompt for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildChatGptPrompt({ endpoint, keyName: k.name })); onNotify('ChatGPT prompt copied. Paste the key only into the GPT’s Authentication field.'); }}><Icon name="chat-left-text" /> ChatGPT prompt</button>} <button className="btn btn-sm btn-outline-danger" aria-label={`Delete ${k.name}`} onClick={() => remove(k)}><Icon name="trash" /></button></td></tr>)}</tbody></table>
       : <div className="ai-key-empty"><Icon name="key" /> No API keys yet.</div>}
   </div>;
 }

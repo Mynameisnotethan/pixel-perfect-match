@@ -1,3 +1,4 @@
+import { aiOpenApi } from './ai-openapi.mjs';
 // The AI agent feed: an agent sends `Authorization: Bearer lbx_...` and gets the same redacted view as
 // "What the AI sees". Redaction runs here from rules saved by the owner, never from what a caller sends.
 // Shared by the Docker mail server and the desktop app.
@@ -66,6 +67,10 @@ export function createAiRoutes({ verifyKey, feedFor, limit = createLimiter() }) 
   const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   return async (req, res, url) => {
     if (!url.pathname.startsWith('/api/ai/v1/')) return false;
+    if (url.pathname === '/api/ai/v1/openapi.json' && req.method === 'GET') {
+      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0] || (req.socket?.encrypted ? 'https' : 'http');
+      json(res, 200, aiOpenApi(`${proto}://${req.headers['x-forwarded-host'] || req.headers.host || url.host}/api/ai/v1`)); return true;
+    }
     if (req.method !== 'GET') { json(res, 405, { error: 'read_only' }); return true; }
     const key = (/^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '') || [])[1];
     if (!key || !limit('k:' + key.slice(-12))) { json(res, key ? 429 : 401, { error: key ? 'rate_limited' : 'api_key_required' }); return true; }

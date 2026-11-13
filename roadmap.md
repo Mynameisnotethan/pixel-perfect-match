@@ -91,3 +91,9 @@
 - [x] Preserve To/Cc/Bcc, plain/HTML bodies, and attachments through Gmail, Microsoft Graph, and SMTP
 - [x] Allow the send endpoint to carry the composer's 25 MB attachment allowance without relaxing other request limits
 - [x] Replace remaining Cypht browser-tab metadata and the Servers page heading with Lockbox/Mailboxes
+
+# Message list interaction
+
+- [x] Open the email when any empty part of a message row is clicked, not only its text
+- [x] Keep the row's checkbox and flag controls working without opening the email
+- [x] Cover the behaviour with a test and verify clicking, back, and draft rows in the browser

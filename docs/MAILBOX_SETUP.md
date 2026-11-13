@@ -57,7 +57,7 @@ Official release / fork release. The three values below are baked into `release-
 cd desktop && npm install
 export LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID=...  LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET=...
 export LOCKBOX_MS_DESKTOP_CLIENT_ID=...
-npm run dist:win     # Windows NSIS installer -> desktop/release/Lockbox Setup 0.1.0.exe
+npm run dist:win     # Windows per-user NSIS installer -> desktop/release/Lockbox Setup 0.1.0.exe
 # npm run dist:mac / npm run dist:linux on those platforms
 ```
 
@@ -120,6 +120,7 @@ None of the steps below have been run against real accounts yet:
 - Load the inbox, send a test message, restart the app or container, and confirm the mailbox is still connected.
 - Revoke access in the Google or Microsoft account settings and confirm **Reconnect required** appears.
 - The UI uses live mode automatically inside the desktop app (`window.lockboxMailboxes`). Self-hosted web builds (`VITE_LOCKBOX_MAIL_API=1`, set in `Dockerfile.web`) use `/api/mailboxes`. See `docs/HOSTINGER_DEPLOY.md`.
+- Desktop app data is stored in `private-store.lbx` under Electron's per-user data directory. AES-256-GCM authenticates the encrypted data, gzip compression is lossless, and the random key is held by the OS credential vault. The Windows installer is per-user and does not request machine-wide installation. Transient Chromium cache is cleared on exit. Online-only email in Settings removes persistent messages, drafts, and queued sends while leaving provider mail untouched. Files the user explicitly downloads are outside this protection.
 - The Windows installer (`npm run dist:win`) has not been built here; only a Linux unpacked build was verified.
 
 

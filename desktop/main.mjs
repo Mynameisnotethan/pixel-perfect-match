@@ -1,6 +1,6 @@
 // Lockbox desktop shell (Electron). OAuth runs in the native process:
 // system browser + PKCE + loopback callback; tokens live in the OS credential vault (keytar).
-import { app, BrowserWindow, ipcMain, shell, protocol, net } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, protocol, net, session } from 'electron';
 import { pathToFileURL } from 'node:url';
 import http from 'node:http';
 import path from 'node:path';
@@ -13,6 +13,7 @@ import nodemailer from 'nodemailer';
 import { createImapClient, normalizeImap } from './connectors/imap.mjs';
 import { createKeyStore } from './connectors/keystore.mjs';
 import { createAiRoutes, buildFeed, cleanPrivacy } from './connectors/ai-feed.mjs';
+import { createSecureStore } from './secure-store.mjs';
 // The desktop runs on the user's own computer, so home-network mail servers are allowed.
 const imap = createImapClient({ ImapFlow, nodemailer, allowPrivate: true });
 
@@ -124,6 +125,14 @@ on('aiKeys:remove', id => aiKeys.remove(LOCAL_USER, id));
 on('privacy:get', () => privacyVault.read());
 on('privacy:put', body => privacyVault.write(cleanPrivacy(body)));
 on('ai:endpoint', () => aiEndpoint);
+let privateStore;
+const validStoreKey = key => {
+  if (typeof key !== 'string' || !/^lockbox-live:v1:[a-z-]+$/.test(key)) throw new Error('invalid_storage_key');
+  return key;
+};
+on('store:get', (key, fallback) => privateStore.get(validStoreKey(key), fallback));
+on('store:put', (key, value) => privateStore.put(validStoreKey(key), value));
+on('store:remove', keys => privateStore.remove(keys.map(validStoreKey)));
 const aiRoutes = createAiRoutes({
   verifyKey: key => aiKeys.verify(key),
   feedFor: async (_user, { mailbox }) => buildFeed({
@@ -144,6 +153,11 @@ function startAiServer() {
 }
 
 app.whenReady().then(() => {
+  privateStore = createSecureStore({
+    file: path.join(app.getPath('userData'), 'private-store.lbx'),
+    getKey: () => keytar.getPassword(SERVICE, 'storage-key'),
+    setKey: value => keytar.setPassword(SERVICE, 'storage-key', value),
+  });
   startAiServer();
   const root = path.join(dir, 'renderer-dist');
   protocol.handle('app', req => {
@@ -152,10 +166,21 @@ app.whenReady().then(() => {
     if (!file.startsWith(root + path.sep)) return new Response('forbidden', { status: 403 });
     return net.fetch(pathToFileURL(fs.existsSync(file) ? file : path.join(root, 'index.html')).toString());
   });
-  const win = new BrowserWindow({ width: 1280, height: 860, webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false } });
+  const win = new BrowserWindow({ width: 1280, height: 860, webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   // The mailbox bridge is only for the Lockbox UI: keep the window on its origin, open other links in the browser.
   win.webContents.on('will-navigate', (e, url) => { if (new URL(url).origin !== appOrigin) { e.preventDefault(); shell.openExternal(url); } });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.loadURL(APP_URL);
 });
 app.on('window-all-closed', () => app.quit());
+let quitting = false;
+app.on('before-quit', event => {
+  if (quitting) return;
+  quitting = true;
+  event.preventDefault();
+  // Finish encrypted writes, then remove transient Chromium cache. Explicit Downloads are user files and are not deleted.
+  (async () => {
+    try { await privateStore?.flush(); await session.defaultSession.clearCache(); }
+    finally { app.exit(0); }
+  })();
+});

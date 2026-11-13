@@ -11,4 +11,10 @@ contextBridge.exposeInMainWorld('lockboxMailboxes', {
   aiKeys: { list: () => ipcRenderer.invoke('aiKeys:list'), create: name => ipcRenderer.invoke('aiKeys:create', name), remove: id => ipcRenderer.invoke('aiKeys:remove', id) },
   privacy: { get: () => ipcRenderer.invoke('privacy:get'), put: body => ipcRenderer.invoke('privacy:put', body) },
   aiEndpoint: () => ipcRenderer.invoke('ai:endpoint'),
+  // Renderer data is encrypted and compressed by the main process; plaintext never crosses the bridge.
+  store: {
+    get: (key, fallback) => ipcRenderer.invoke('store:get', key, fallback),
+    put: (key, value) => ipcRenderer.invoke('store:put', key, value),
+    remove: keys => ipcRenderer.invoke('store:remove', keys),
+  },
 });

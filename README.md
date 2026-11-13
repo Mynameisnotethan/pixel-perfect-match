@@ -26,6 +26,8 @@ npm run dev
 
 The Lovable preview uses simulated mailbox connections. Live web mailbox connections run through the self-hosted Docker deployment; desktop connections use the desktop app's local system credential store.
 
+The desktop app encrypts and losslessly compresses saved messages, drafts, attachments, and settings in one per-user data file. Its random encryption key stays in the operating system credential vault, not beside the data. Existing plaintext desktop caches migrate automatically and are removed. **Settings → Online-only email** instead keeps messages, drafts, and queued sends only in memory until Lockbox closes. Explicitly downloaded attachments remain ordinary user files and are not encrypted or deleted by Lockbox.
+
 ## Verification status
 
 The application builds and its automated tests cover the mailbox helpers and the self-hosted sign-in flow

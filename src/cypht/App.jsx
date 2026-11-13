@@ -17,26 +17,68 @@ import { liveBridge as detectLive } from './mailbox-live.js';
 // Real (server/desktop) mode never shows sample data and keeps its saved data apart from the preview's.
 const LIVE = typeof window !== 'undefined' && !!detectLive();
 const STORE = LIVE ? 'lockbox-live:v1:' : 'cypht-preview:v1:';
-function useSaved(key, initial, normalize = value => value) {
+function useSaved(key, initial, normalize = value => value, persist = true) {
+  const store = LIVE && detectLive()?.runtime === 'desktop' ? detectLive()?.store : null;
+  const name = STORE + key;
+  const loadId = `${name}:${String(persist)}`;
   const fallback = () => normalize(typeof initial === 'function' ? initial() : initial);
-  const [value, setValue] = useState(() => {
-    try { const saved = localStorage.getItem(STORE + key); return saved ? normalize(JSON.parse(saved)) : fallback(); }
-    catch { return fallback(); }
-  });
+  const [value, setValue] = useState(fallback);
+  const [loaded, setLoaded] = useState(null);
   const [storageError, setStorageError] = useState(false);
+  const ready = loaded === loadId;
   useEffect(() => {
-    try { localStorage.setItem(STORE + key, JSON.stringify(value)); setStorageError(false); }
-    catch { setStorageError(true); }
-  }, [key, value]);
+    let active = true;
+    if (persist === undefined) return () => { active = false; };
+    if (!store) {
+      try { const saved = localStorage.getItem(name); if (saved && persist) setValue(normalize(JSON.parse(saved))); }
+      catch { setValue(fallback()); }
+      if (!persist) localStorage.removeItem(name);
+      setLoaded(loadId);
+      return () => { active = false; };
+    }
+    if (!persist) {
+      localStorage.removeItem(name);
+      store.remove([name]).catch(() => setStorageError(true));
+      setLoaded(loadId);
+      return () => { active = false; };
+    }
+    store.get(name).then(async saved => {
+      let next;
+      if (saved !== undefined) next = normalize(saved);
+      else {
+        try { const legacy = localStorage.getItem(name); next = legacy ? normalize(JSON.parse(legacy)) : fallback(); }
+        catch { next = fallback(); }
+      }
+      if (!active) return;
+      setValue(next);
+      await store.put(name, next);
+      localStorage.removeItem(name); // Remove the old plaintext desktop cache after encrypted migration.
+      if (active) { setStorageError(false); setLoaded(loadId); }
+    }).catch(() => { if (active) { setStorageError(true); setLoaded(loadId); } });
+    return () => { active = false; };
+  }, [name, loadId, store, persist]);
   useEffect(() => {
+    if (!ready || storageError) return;
+    if (store) {
+      const operation = persist ? store.put(name, value) : store.remove([name]);
+      operation.then(() => setStorageError(false)).catch(() => setStorageError(true));
+      return;
+    }
+    try {
+      if (persist) localStorage.setItem(name, JSON.stringify(value)); else localStorage.removeItem(name);
+      setStorageError(false);
+    } catch { setStorageError(true); }
+  }, [name, value, ready, persist, store, storageError]);
+  useEffect(() => {
+    if (store) return;
     const sync = event => {
-      if (event.key !== STORE + key || !event.newValue) return;
+      if (event.key !== name || !event.newValue) return;
       try { setValue(normalize(JSON.parse(event.newValue))); } catch { /* Ignore incomplete data from another window. */ }
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
-  }, [key]);
-  return [value, setValue, storageError];
+  }, [name, store]);
+  return [value, setValue, storageError, ready];
 }
 function Icon({ name, className = '' }) { return <i aria-hidden="true" className={`bi bi-${name} ${className}`} />; }
 function Tool({ icon, label, onClick, disabled = false, children, className = '' }) { return <button type="button" className={`btn btn-sm btn-outline-secondary ${className}`} title={label} aria-label={label} onClick={onClick} disabled={disabled}><Icon name={icon} />{children}</button>; }
@@ -60,13 +102,14 @@ import { upsertMailbox, setStatus, removeMailbox, accountFromMailbox, mailboxId,
 
 export default function App() {
   const auth = useAuth();
+  const [settings, setSettings, , settingsReady] = useSaved('settings', initialSettings);
+  const mailPersistence = settingsReady ? !settings.onlineOnly : undefined;
   const [accounts, setAccounts] = useSaved('accounts', LIVE ? [] : initialAccounts);
-  const [messages, setMessages, messagesStorageError] = useSaved('messages', LIVE ? [] : seedMessages);
+  const [messages, setMessages, messagesStorageError, messagesReady] = useSaved('messages', LIVE ? [] : seedMessages, value => value, mailPersistence);
   const [contacts, setContacts] = useSaved('contacts', LIVE ? [] : initialContacts);
-  const [settings, setSettings] = useSaved('settings', initialSettings);
   const [events, setEvents] = useSaved('events', []);
   const [view, setView] = useState('everything');
-  const [mailboxes, setMailboxes] = useSaved('mailboxes', []);
+  const [mailboxes, setMailboxes, , mailboxesReady] = useSaved('mailboxes', []);
   const [aiDefaults, setAiDefaults] = useSaved('ai-defaults', freshDefaults, normalizeDefaults);
   const [labels, setLabels] = useSaved('privacy-labels', presetLabels);
   const [hideLabel, setHideLabel] = useState('');
@@ -76,8 +119,8 @@ export default function App() {
   const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null);
-  const [drafts, setDrafts, draftsStorageError] = useSaved('open-drafts', []);
-  const [pendingSends, setPendingSends] = useSaved('pending-sends', []);
+  const [drafts, setDrafts, draftsStorageError] = useSaved('open-drafts', [], value => value, mailPersistence);
+  const [pendingSends, setPendingSends] = useSaved('pending-sends', [], value => value, mailPersistence);
   const [composeSettings, setComposeSettings] = useSaved('compose-settings', { undoSeconds: 5, defaultExpanded: false, confirmKeyboardSend: true, signatures: [], templates: [] });
   const [undoSend, setUndoSend] = useState(null);
   const [discarded, setDiscarded] = useState(null);
@@ -182,11 +225,11 @@ export default function App() {
     }
   }
   useEffect(() => {
-    const bridge = liveBridge(); if (!bridge) return;
+    const bridge = liveBridge(); if (!bridge || !messagesReady || !mailboxesReady) return;
     const result = new URLSearchParams(window.location.search).get('mailbox');
     if (result) { notify(result === 'connected' ? 'Mailbox connected. Syncing your inbox…' : 'Mailbox sign-in did not finish. Please try again.'); window.history.replaceState(null, '', window.location.pathname); }
     refreshLive();
-  }, []);
+  }, [messagesReady, mailboxesReady]);
   // Live mode: hide-from-AI rules are kept by Lockbox itself (server or desktop vault), because the AI feed
   // redacts from that copy. Load it first, then save every change; never push before loading.
   const serverRules = useRef(null);
@@ -440,7 +483,7 @@ export default function App() {
           {mailboxes.length === 0 && (LIVE || accounts.every(a => a.demo || a.live)) && <div className="empty-state"><Icon name="hdd-network" /><h2>No mailboxes yet</h2><p>Connect Gmail, Outlook or any IMAP/SMTP email.</p><button className="btn btn-primary" onClick={() => setModal({ type: 'mailbox' })}><Icon name="plus-lg" /> Add mailbox</button></div>}
           <div className="server-grid">{mailboxes.map(b => { const info = connectionInfo(b); const acct = accounts.find(a => a.id === b.id); return <div className="card" key={b.id}><div className="card-body"><h2><span className="account-dot" style={{ background: MAILBOX_PROVIDERS[b.provider].color }} />{acct?.name || (b.provider === 'imap' ? (b.settings?.name || b.email.split('@')[1]) : MAILBOX_PROVIDERS[b.provider].name)}</h2><p>{b.email}</p><dl><dt>Protocol</dt><dd>{info.type}</dd><dt>{b.provider === 'imap' ? 'Incoming' : 'Server'}</dt><dd>{info.host || 'Not set'}:{info.port}</dd>{b.provider === 'imap' && <><dt>Outgoing</dt><dd>{info.smtpHost || 'Not set'}:{info.smtpPort}</dd></>}<dt>Status</dt><dd><span className={`mailbox-status is-${b.status}`}>{['connecting', 'syncing'].includes(b.status) && <span className="spinner-border spinner-border-sm" aria-hidden="true" />} {STATUS_TEXT[b.status] || b.status}</span></dd></dl><div className="contact-actions">{b.status === 'reconnect' && b.provider !== 'imap' && <button className="btn btn-sm btn-primary" onClick={() => connectMailbox(b.provider, b.email)}>Reconnect</button>}{b.provider === 'imap' && <button className={`btn btn-sm ${b.status === 'reconnect' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setModal({ type: 'mailbox', edit: b })}>{b.status === 'reconnect' ? 'Fix sign-in' : 'Edit'}</button>}{LIVE && b.status !== 'syncing' && b.status !== 'reconnect' && <button className="btn btn-sm btn-outline-secondary" onClick={() => syncLive(b)}><Icon name="arrow-repeat" /> Sync</button>}<button className="btn btn-sm btn-outline-danger" onClick={() => disconnectMailbox(b)}>Disconnect</button></div></div></div>; })}
           {!LIVE && accounts.filter(a => !a.demo && !a.live && !mailboxes.some(b => b.id === a.id)).map(a => <div className="card" key={a.id}><div className="card-body"><h2><span className="account-dot" style={{ background: a.color }} />{a.name}</h2><p>{a.email}</p><dl><dt>Protocol</dt><dd>{a.type || 'IMAP'}</dd><dt>Server</dt><dd>{a.host || 'Not configured'}</dd><dt>Status</dt><dd><span className="sample-badge">Sample account</span></dd></dl><div className="contact-actions"><button className="btn btn-sm btn-outline-danger" onClick={() => setModal({ type: 'remove-account', account: a })}>Remove</button></div></div></div>)}</div></section>}
-        {view === 'settings' && <section className="page-content settings-content"><h2>General</h2><p className="muted-copy">Changes apply immediately and are saved in this browser.</p><div className="settings-row"><label htmlFor="theme">Theme</label><select id="theme" className="form-select" value={settings.theme} onChange={e => setSettings(s => ({ ...s, theme: e.target.value }))}><option value="default">Default (light)</option><option value="darkly">Dark</option></select></div><div className="settings-row"><label htmlFor="page-size">Messages per page</label><select id="page-size" className="form-select" value={settings.pageSize} onChange={e => setSettings(s => ({ ...s, pageSize: Number(e.target.value) }))}>{[10, 20, 50].map(n => <option key={n}>{n}</option>)}</select></div><div className="settings-row"><label htmlFor="timezone">Display time zone</label><select id="timezone" className="form-select" value={settings.timezone} onChange={e => setSettings(s => ({ ...s, timezone: e.target.value }))}>{['America/Toronto', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'UTC'].map(z => <option key={z}>{z}</option>)}</select></div><h2 className="settings-section-title">Message list</h2>{[['compact', 'Compact message rows', 'Show more messages with less vertical spacing.'], ['readingPane', 'Reading pane', 'Keep the message list visible when opening a message.'], ['confirmDelete', 'Confirm before deleting', 'Ask before moving sample messages to Trash.']].map(([key, label, description]) => <div className="settings-row" key={key}><label htmlFor={key}>{label}<small>{description}</small></label><input id={key} className="form-check-input" type="checkbox" checked={!!settings[key]} onChange={e => setSettings(s => ({ ...s, [key]: e.target.checked }))} /></div>)}<button className="btn btn-primary mt-3" onClick={() => notify('Preview settings saved in this browser.')}>Save settings</button></section>}
+        {view === 'settings' && <section className="page-content settings-content"><h2>General</h2><p className="muted-copy">Changes apply immediately and are saved {LIVE && detectLive()?.runtime === 'desktop' ? 'in encrypted storage on this computer' : 'in this browser'}.</p><div className="settings-row"><label htmlFor="theme">Theme</label><select id="theme" className="form-select" value={settings.theme} onChange={e => setSettings(s => ({ ...s, theme: e.target.value }))}><option value="default">Default (light)</option><option value="darkly">Dark</option></select></div><div className="settings-row"><label htmlFor="page-size">Messages per page</label><select id="page-size" className="form-select" value={settings.pageSize} onChange={e => setSettings(s => ({ ...s, pageSize: Number(e.target.value) }))}>{[10, 20, 50].map(n => <option key={n}>{n}</option>)}</select></div><div className="settings-row"><label htmlFor="timezone">Display time zone</label><select id="timezone" className="form-select" value={settings.timezone} onChange={e => setSettings(s => ({ ...s, timezone: e.target.value }))}>{['America/Toronto', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'UTC'].map(z => <option key={z}>{z}</option>)}</select></div><h2 className="settings-section-title">Message list</h2>{[['compact', 'Compact message rows', 'Show more messages with less vertical spacing.'], ['readingPane', 'Reading pane', 'Keep the message list visible when opening a message.'], ['confirmDelete', 'Confirm before deleting', 'Ask before moving sample messages to Trash.']].map(([key, label, description]) => <div className="settings-row" key={key}><label htmlFor={key}>{label}<small>{description}</small></label><input id={key} className="form-check-input" type="checkbox" checked={!!settings[key]} onChange={e => setSettings(s => ({ ...s, [key]: e.target.checked }))} /></div>)}{LIVE && <><h2 className="settings-section-title">Storage</h2><div className="settings-row"><label htmlFor="onlineOnly">Online-only email<small>Do not save messages, drafts, or queued sends on this computer. They remain in memory until Lockbox closes; provider mail is not deleted.</small></label><input id="onlineOnly" className="form-check-input" type="checkbox" checked={!!settings.onlineOnly} onChange={e => setSettings(s => ({ ...s, onlineOnly: e.target.checked }))} /></div>{detectLive()?.runtime === 'desktop' && <p className="muted-copy">When online-only is off, Lockbox saves all fields with lossless compression and authenticated encryption. The encryption key stays in your operating system’s credential vault.</p>}</>}<button className="btn btn-primary mt-3" onClick={() => notify('Settings saved.')}>Save settings</button></section>}
         {view === 'ai' && <section className="page-content settings-content ai-page">
           <nav className="ai-tabs">{[['ai-keys', 'API keys'], ['ai-hide', 'Hide by default'], ['ai-labels', 'Labels']].map(([id, t]) => <a key={id} href={`#${id}`} onClick={e => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{t}</a>)}</nav>
           <div className="ai-card" id="ai-keys"><AiKeys onNotify={notify} /></div>

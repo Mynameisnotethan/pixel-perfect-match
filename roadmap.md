@@ -68,6 +68,15 @@
 - [x] Verify real HTTP API-key authentication, read-only behavior, no-store responses, and revocation
 - [x] Verify serialized API responses contain no hidden or unreviewed content
 
+# Secure and efficient desktop storage
+
+- [x] Encrypt saved desktop app data with an OS-vault key and authenticated encryption
+- [x] Use lossless compression and one compact data file without dropping email, draft, or attachment fields
+- [x] Migrate existing desktop browser storage into encrypted storage and remove plaintext copies
+- [x] Add online-only mode that excludes messages, drafts, and queued sends from persistent storage
+- [x] Clear transient Chromium cache on exit and install per Windows user without machine-wide access
+- [ ] Build and verify the Windows installer and OS credential-vault behavior on Windows
+
 # Interface and quality audit
 
 - [x] Rename the Servers sidebar button to Mailboxes (plural, no apostrophe)

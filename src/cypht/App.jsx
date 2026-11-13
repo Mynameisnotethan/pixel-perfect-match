@@ -7,7 +7,7 @@ import AiDefaults from './AiDefaults.jsx';
 import AiKeys from './AiKeys.jsx';
 import { rulesFrom } from '../../connectors/ai-feed.mjs';
 import { usePrivacyEditor } from './PrivacyEditor.jsx';
-import { addRanges, aiView, applyDefaults, labelFor, presetLabels, freshDefaults, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
+import { addRanges, aiView, applyDefaults, labelFor, presetLabels, freshDefaults, normalizeDefaults, fieldFullyHidden, hideEntireMessage, isReceived, lockStatus, mask, mergeRanges, privacyFields, segments, selectionSegments, subtractRange, togglePrivacyField } from './privacy.js';
 import { cleanHtml, draftMessage, normalizeDraft, recipient, textToHtml, htmlToText } from './compose-utils.js';
 // Logos are bundled files so self-hosted servers and the desktop app can show them.
 const logoDark = { url: '/brand/lockbox-logo-dark.png' };
@@ -17,10 +17,11 @@ import { liveBridge as detectLive } from './mailbox-live.js';
 // Real (server/desktop) mode never shows sample data and keeps its saved data apart from the preview's.
 const LIVE = typeof window !== 'undefined' && !!detectLive();
 const STORE = LIVE ? 'lockbox-live:v1:' : 'cypht-preview:v1:';
-function useSaved(key, initial) {
+function useSaved(key, initial, normalize = value => value) {
+  const fallback = () => normalize(typeof initial === 'function' ? initial() : initial);
   const [value, setValue] = useState(() => {
-    try { const saved = localStorage.getItem(STORE + key); return saved ? JSON.parse(saved) : typeof initial === 'function' ? initial() : initial; }
-    catch { return typeof initial === 'function' ? initial() : initial; }
+    try { const saved = localStorage.getItem(STORE + key); return saved ? normalize(JSON.parse(saved)) : fallback(); }
+    catch { return fallback(); }
   });
   const [storageError, setStorageError] = useState(false);
   useEffect(() => {
@@ -30,7 +31,7 @@ function useSaved(key, initial) {
   useEffect(() => {
     const sync = event => {
       if (event.key !== STORE + key || !event.newValue) return;
-      try { setValue(JSON.parse(event.newValue)); } catch { /* Ignore incomplete data from another window. */ }
+      try { setValue(normalize(JSON.parse(event.newValue))); } catch { /* Ignore incomplete data from another window. */ }
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
@@ -65,7 +66,7 @@ export default function App() {
   const [events, setEvents] = useSaved('events', []);
   const [view, setView] = useState('everything');
   const [mailboxes, setMailboxes] = useSaved('mailboxes', []);
-  const [aiDefaults, setAiDefaults] = useSaved('ai-defaults', freshDefaults());
+  const [aiDefaults, setAiDefaults] = useSaved('ai-defaults', freshDefaults, normalizeDefaults);
   const [labels, setLabels] = useSaved('privacy-labels', presetLabels);
   const [hideLabel, setHideLabel] = useState('');
   const [query, setQuery] = useState('');
@@ -425,7 +426,7 @@ export default function App() {
     {modal?.type === 'event-detail' && <Dialog title={modal.event.title} onClose={() => setModal(null)}><p>{modal.event.date} · {modal.event.time || 'All day'}</p><p className="my-3">{modal.event.notes}</p><button className="btn btn-outline-danger" onClick={() => { setEvents(all => all.filter(e => e.id !== modal.event.id)); setModal(null); }}>Remove event</button></Dialog>}
     {modal?.type === 'delete' && <Dialog title="Move to Trash?" onClose={() => setModal(null)}><p>Move {modal.ids.length} sample message{modal.ids.length === 1 ? '' : 's'} to Trash? You can restore them later.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-danger" onClick={() => { move(modal.ids, 'trash'); setModal(null); }}>Move to Trash</button></div></Dialog>}
     {modal?.type === 'remove-account' && <Dialog title="Remove sample account?" onClose={() => setModal(null)}><p>Remove {modal.account.email} and its sample messages from this browser?</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-danger" onClick={() => { const id = modal.account.id; setAccounts(all => all.filter(a => a.id !== id)); setMessages(all => all.filter(m => m.account !== id)); setSourceIds(null); setModal(null); go('servers'); }}>Remove</button></div></Dialog>}
-    {modal?.type === 'reset' && <Dialog title="Reset preview data?" onClose={() => setModal(null)}><p>This resets sample messages, accounts, drafts, contacts, calendar events, and settings in this browser. It does not affect a real mailbox.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={() => { setAccounts(initialAccounts); setMessages(seedMessages()); setContacts(initialContacts); setEvents([]); setSettings(initialSettings); setDrafts([]); setPendingSends([]); setUndoSend(null); setDiscarded(null); setSourceIds(null); setModal(null); go('everything'); notify('Sample data reset.'); }}>Reset sample data</button></div></Dialog>}
+    {modal?.type === 'reset' && <Dialog title="Reset preview data?" onClose={() => setModal(null)}><p>This resets sample messages, accounts, drafts, contacts, calendar events, and settings in this browser. It does not affect a real mailbox.</p><div className="dialog-actions"><button className="btn btn-outline-secondary" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={() => { setAccounts(initialAccounts); setMessages(seedMessages()); setContacts(initialContacts); setEvents([]); setSettings(initialSettings); setAiDefaults(freshDefaults()); setDrafts([]); setPendingSends([]); setUndoSend(null); setDiscarded(null); setSourceIds(null); setModal(null); go('everything'); notify('Sample data reset.'); }}>Reset sample data</button></div></Dialog>}
     {modal?.type === 'about' && <Dialog title="About this preview" onClose={() => setModal(null)}><p>This is an editable frontend recreation of Cypht. It reuses Cypht's core stylesheet and default theme, with React components for browser preview.</p><p className="mt-3">Messages and accounts are samples saved in this browser. Sending, provider sign-in, mail synchronization, and feed retrieval are not connected.</p><p className="mt-3">The original PHP source is included in the download under reference/. It does not execute in this preview. This frontend is not a complete 1:1 functional port.</p><p className="mt-3">Cypht source and reused assets: LGPL-2.1. See LICENSE and THIRD_PARTY_NOTICES.md.</p></Dialog>}
     {toast && <div className="preview-toast" role="status"><Icon name="info-circle" /><span>{toast}</span>{undoSend && pendingSends.some(item => item.message.id === undoSend) && <button className="toast-action" onClick={() => undoPending(undoSend)}>Undo send</button>}{discarded && <button className="toast-action" onClick={() => { const restored = normalizeDraft(discarded, discarded.account); setDrafts(all => [...all.filter(item => item.id !== restored.id), restored]); setDiscarded(null); setToast(''); }}>Undo discard</button>}<button aria-label="Dismiss notification" onClick={() => { setToast(''); setDiscarded(null); }}><Icon name="x-lg" /></button></div>}
   </div>;

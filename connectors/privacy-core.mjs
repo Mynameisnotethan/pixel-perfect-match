@@ -239,5 +239,17 @@ export function aiView(raw, defaults, labels) {
 /** New people start with everything hidden from AI. */
 export const fullDefaults = Object.freeze({ subject: true, sender: true, email: true, body: true, attachments: true, sent: Object.freeze({ subject: true, to: true, body: true, attachments: true }) });
 export const freshDefaults = () => ({ ...fullDefaults, sent: { ...fullDefaults.sent } });
+/** Missing fields in older saves keep the safe all-hidden default; explicit false choices are preserved. */
+export function normalizeDefaults(value) {
+  const out = freshDefaults();
+  if (!value || typeof value !== 'object') return out;
+  for (const key of ['subject', 'sender', 'email', 'body', 'attachments']) {
+    if (typeof value[key] === 'boolean') out[key] = value[key];
+  }
+  for (const key of Object.keys(fullDefaults.sent)) {
+    if (typeof value.sent?.[key] === 'boolean') out.sent[key] = value.sent[key];
+  }
+  return out;
+}
 /** Changing hide-by-default settings requires typing exactly "Lock". */
 export const confirmsLock = text => text === 'Lock';

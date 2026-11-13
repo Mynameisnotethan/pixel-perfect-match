@@ -1,7 +1,7 @@
 // The AI agent feed: an agent sends `Authorization: Bearer lbx_...` and gets the same redacted view as
 // "What the AI sees". Redaction runs here from rules saved by the owner, never from what a caller sends.
 // Shared by the Docker mail server and the desktop app.
-import { aiView } from './privacy-core.mjs';
+import { aiView, normalizeDefaults } from './privacy-core.mjs';
 
 /** Per-message fields that make up hide-from-AI rules (everything else comes fresh from the mailbox). */
 export const RULE_KEYS = ['reviewed', 'overrides', 'hiddenSubjectRanges', 'hiddenSenderRanges', 'hiddenEmailRanges', 'hiddenToRanges', 'hiddenRanges', 'hiddenAttachments', 'hiddenAttachmentLabels'];
@@ -19,7 +19,7 @@ export function cleanPrivacy(body = {}) {
   const rules = {};
   for (const [id, r] of Object.entries(body.rules || {}).slice(0, 20000)) if (typeof id === 'string' && id.length < 400 && r && typeof r === 'object') rules[id] = pickRules(r);
   const labels = Array.isArray(body.labels) ? body.labels.slice(0, 200).map(l => ({ id: String(l.id || ''), name: String(l.name || '').slice(0, 60), color: String(l.color || '') })) : undefined;
-  return { rules, defaults: body.defaults && typeof body.defaults === 'object' ? body.defaults : {}, ...(labels ? { labels } : {}) };
+  return { rules, defaults: normalizeDefaults(body.defaults), ...(labels ? { labels } : {}) };
 }
 
 /** Splits "Name <a@b.c>" into its parts. */
@@ -45,7 +45,7 @@ export async function buildFeed({ boxes, fetchInbox, privacy, mailbox }) {
     if (box.status === 'reconnect') continue;
     let items; try { items = await fetchInbox(box); } catch { continue; }
     for (const m of inboxToMessages(box, items)) {
-      const v = aiView({ ...m, ...pickRules(p.rules?.[m.id]) }, p.defaults || {}, p.labels);
+      const v = aiView({ ...m, ...pickRules(p.rules?.[m.id]) }, normalizeDefaults(p.defaults), p.labels);
       if (v) out.push({ ...v, mailbox: box.id });
     }
   }

@@ -60,3 +60,4 @@
 - [x] Make docker-compose.yml deployable from a bare raw file URL: images only, no build contexts or relative mounts; Caddyfile baked into lockbox-proxy.
 - [ ] First Hostinger deploy: paste the raw compose URL, make the three ghcr.io packages public once, then add provider credentials in Setup.
 - [x] AI Access: multiple per-account API keys + card layout
+- [x] Keep every Hide by default switch on for new, incomplete, and reset settings while preserving deliberate exceptions

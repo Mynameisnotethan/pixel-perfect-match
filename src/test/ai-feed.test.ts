@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 // @ts-expect-error - plain ESM modules
-import { buildFeed, createAiRoutes, rulesFrom } from "../../connectors/ai-feed.mjs";
+import { buildFeed, cleanPrivacy, createAiRoutes, rulesFrom } from "../../connectors/ai-feed.mjs";
 // @ts-expect-error - plain ESM modules
 import { createKeyStore } from "../../connectors/keystore.mjs";
 // @ts-expect-error - plain ESM modules
@@ -20,20 +20,26 @@ const items = [
 const rules = { "google:a@x.com:1": { reviewed: true, hiddenSubjectRanges: [[13, 17, "financial"]], hiddenSenderRanges: [[0, 11]], hiddenRanges: [[8, 13]] } };
 const labels = [{ id: "financial", name: "Financial info", color: "#16a34a" }];
 const feed = (privacy: unknown) => buildFeed({ boxes: [box], fetchInbox: async () => items, privacy });
+const allVisible = { subject: false, sender: false, email: false, body: false, attachments: false, sent: { subject: false, to: false, body: false, attachments: false } };
 
 describe("AI agent feed", () => {
   it("never returns hidden subject, sender or body text", async () => {
-    const out = await feed({ rules, labels, defaults: {} });
+    const out = await feed({ rules, labels, defaults: allVisible });
     const text = JSON.stringify(out);
     for (const secret of ["9999", "Bank Teller", "12345"]) expect(text).not.toContain(secret);
     expect(out[0].subject).toBe("Your balance [hidden: Financial info]");
   });
   it("leaves out emails the owner has not reviewed", async () => {
-    const out = await feed({ rules, labels, defaults: {} });
+    const out = await feed({ rules, labels, defaults: allVisible });
     expect(out.map((m: { id: string }) => m.id)).toEqual(["google:a@x.com:1"]);
   });
   it("returns nothing when no rules are saved", async () => {
     expect(await feed(null)).toEqual([]);
+  });
+  it("treats missing defaults in older saves as all hidden", async () => {
+    const out = await feed({ rules: { "google:a@x.com:1": { reviewed: true } }, defaults: {} });
+    expect(out[0]).toMatchObject({ from: "[hidden: Sender name]", email: "[hidden: Sender email]", subject: "[hidden: Subject]", body: "[hidden: Body]" });
+    expect(cleanPrivacy({}).defaults).toEqual({ subject: true, sender: true, email: true, body: true, attachments: true, sent: { subject: true, to: true, body: true, attachments: true } });
   });
   it("applies hide-by-default body setting", async () => {
     const out = await feed({ rules: { "google:a@x.com:1": { reviewed: true } }, defaults: { body: true } });

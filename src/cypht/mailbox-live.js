@@ -10,7 +10,7 @@ async function api(path, init = {}) {
   const headers = { 'Content-Type': 'application/json', ...(init.headers || {}) };
   if (init.method && init.method !== 'GET') headers['x-lockbox-csrf'] = csrfToken();
   const res = await fetch(path, { credentials: 'same-origin', ...init, headers });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(String(body.error || `Request failed (${res.status})`).replace(/^[a-z_]+: /, '')); }
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(String(body.error || (res.status === 404 ? 'This server is running an older Lockbox version. Redeploy it with the latest images to use this feature.' : `Request failed (${res.status})`)).replace(/^[a-z_]+: /, '')); }
   return res.status === 204 ? null : res.json();
 }
 const webBridge = {

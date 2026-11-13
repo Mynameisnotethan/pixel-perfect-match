@@ -52,7 +52,7 @@ describe("docker-compose.yml is deployable from a bare URL", () => {
   it("lets the mail server own sign-in, so Caddy stores no password", () => {
     const caddyfile = readFileSync("deploy/Caddyfile", "utf8");
     expect(caddyfile).not.toMatch(/basic_auth/);
-    expect(caddyfile).toMatch(/\/api\/auth\/\*/);
+    expect(caddyfile).toMatch(/@mail path \/oauth\/\* \/api\/\*/);
     expect(caddyfile).toMatch(/reverse_proxy mail:3000/);
     expect(caddyfile).toMatch(/reverse_proxy web:3000/);
   });

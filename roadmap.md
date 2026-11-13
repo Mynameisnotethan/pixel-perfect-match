@@ -61,3 +61,4 @@
 - [ ] First Hostinger deploy: paste the raw compose URL, make the three ghcr.io packages public once, then add provider credentials in Setup.
 - [x] AI Access: multiple per-account API keys + card layout
 - [x] Keep every Hide by default switch on for new, incomplete, and reset settings while preserving deliberate exceptions
+- [x] Remove the Hide by default Save button; save each unlocked change automatically

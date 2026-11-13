@@ -9,11 +9,16 @@ export default function AiDefaults({ value, onSave, onNotify }) {
   const [asking, setAsking] = useState(false);
   const [word, setWord] = useState('');
   const d = normalizeDefaults(draft || value);
-  const row = (k, label, isSent) => <label key={k} className="form-check form-switch ai-default-row"><input className="form-check-input" type="checkbox" role="switch" disabled={!draft} aria-label={isSent ? `Hide ${label} on sent emails` : undefined} checked={!!(isSent ? d.sent?.[k] : d[k])} onChange={e => setDraft(x => isSent ? { ...x, sent: { ...(x.sent || {}), [k]: e.target.checked } } : { ...x, [k]: e.target.checked })} /><span className="form-check-label">{label}</span></label>;
+  const change = (k, checked, isSent) => {
+    const next = isSent ? { ...d, sent: { ...d.sent, [k]: checked } } : { ...d, [k]: checked };
+    setDraft(next);
+    onSave(next);
+  };
+  const row = (k, label, isSent) => <label key={k} className="form-check form-switch ai-default-row"><input className="form-check-input" type="checkbox" role="switch" disabled={!draft} aria-label={isSent ? `Hide ${label} on sent emails` : undefined} checked={!!(isSent ? d.sent?.[k] : d[k])} onChange={e => change(k, e.target.checked, isSent)} /><span className="form-check-label">{label}</span></label>;
   return <>
-    <div className="ai-card-head"><div><h2>Hide by default</h2><p className="muted-copy">Applies to every email unless you unlock that part on a specific email.</p></div>
+    <div className="ai-card-head"><div><h2>Hide by default</h2><p className="muted-copy">Applies to every email unless you unlock that part on a specific email. Changes save automatically.</p></div>
       {!draft ? <button className="btn btn-sm btn-outline-secondary" onClick={() => { setWord(''); setAsking(true); }}><i className="bi bi-lock-fill" aria-hidden="true" /> Change settings</button>
-        : <div className="ai-save-row"><button className="btn btn-sm btn-outline-secondary" onClick={() => setDraft(null)}>Cancel</button><button className="btn btn-sm btn-primary" onClick={() => { onSave(draft); setDraft(null); onNotify?.('Hide-by-default settings saved.'); }}>Save</button></div>}
+        : <button className="btn btn-sm btn-outline-secondary" onClick={() => { setDraft(null); onNotify?.('Hide-by-default settings saved.'); }}>Done</button>}
     </div>
     <div className={`ai-columns ${draft ? '' : 'is-locked'}`}>
       <div><h3 className="ai-subhead">Received emails</h3><div className="ai-defaults">{received.map(([k, l]) => row(k, l, false))}</div></div>

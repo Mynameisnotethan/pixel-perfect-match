@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error JS module
 import { gmailAttachments } from '../../connectors/mail.mjs';
+// @ts-expect-error JS module
 import { imapAttachments } from '../../connectors/imap.mjs';
+// @ts-expect-error JS module
 import { inboxToMessages } from '../../connectors/ai-feed.mjs';
 
 describe('incoming attachments', () => {

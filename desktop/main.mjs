@@ -94,6 +94,7 @@ const on = (channel, fn) => ipcMain.handle(channel, (e, ...args) => { guard(e); 
 on('mailbox:list', () => readIndex());
 on('mailbox:connect', provider => connect(provider));
 on('mailbox:sync', id => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.inbox(s) : mail[box.provider].inbox(t)));
+on('mailbox:attachment', (id, msgId, attId) => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.attachment(s, msgId, attId) : mail[box.provider].attachment(t, msgId, attId)));
 on('mailbox:send', (id, msg) => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.send(s, msg) : mail[box.provider].send(t, box.email, msg)));
 async function imapSettings(body) {
   const id = `imap:${String(body.email || '').trim().toLowerCase()}`;

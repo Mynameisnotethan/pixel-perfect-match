@@ -30,7 +30,7 @@ export function parseFrom(from = '') {
 /** Converts synced provider inbox items into Lockbox messages for one mailbox. */
 export const inboxToMessages = (box, items) => items.map(item => {
   const { sender, email } = parseFrom(item.from);
-  return { id: `${box.id}:${item.id}`, sender, email, subject: item.subject || '(no subject)', body: item.snippet || '', account: box.id, folder: 'inbox', read: !!item.read, flagged: false, date: item.date, attachments: [] };
+  return { id: `${box.id}:${item.id}`, sender, email, subject: item.subject || '(no subject)', body: item.snippet || '', account: box.id, folder: 'inbox', read: !!item.read, flagged: false, date: item.date, attachments: (item.attachments || []).map(a => ({ name: a.name, type: a.type, size: a.size, remote: { message: String(item.id), id: String(a.id) } })) };
 });
 
 /**

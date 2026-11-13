@@ -241,6 +241,11 @@ http.createServer(async (req, res) => {
     const action = url.pathname.split('/')[4];
     if (req.method === 'GET' && !id) return send(res, 200, ((await load())[user] || []).map(publicBox));
     if (req.method === 'GET' && action === 'inbox') return send(res, 200, await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)));
+    if (req.method === 'GET' && action === 'attachment') {
+      const msgId = url.searchParams.get('message') || '', attId = url.searchParams.get('id') || '';
+      if (!msgId || !attId) return send(res, 400, { error: 'attachment_not_found' });
+      return send(res, 200, await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.attachment(b.imap, msgId, attId) : mail[b.provider].attachment(t, msgId, attId)));
+    }
     if (req.method === 'POST' && action === 'send') {
       const message = normalizeOutgoing(await readJson(req, 40 * 1024 * 1024));
       await withToken(user, id, (t, b) => b.provider === 'imap' ? imap.send(b.imap, message) : mail[b.provider].send(t, b.email, message));

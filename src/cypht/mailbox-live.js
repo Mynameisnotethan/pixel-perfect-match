@@ -48,6 +48,7 @@ const webBridge = {
     save: s => api('/api/mailboxes/imap', { method: 'POST', body: JSON.stringify(s) }),
   },
   sync: id => api(`/api/mailboxes/${encodeURIComponent(id)}/inbox`),
+  attachment: (id, msgId, attId) => api(`/api/mailboxes/${encodeURIComponent(id)}/attachment?message=${encodeURIComponent(msgId)}&id=${encodeURIComponent(attId)}`),
   send: (id, msg) => api(`/api/mailboxes/${encodeURIComponent(id)}/send`, { method: 'POST', body: JSON.stringify(msg) }),
   disconnect: id => api(`/api/mailboxes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
@@ -77,4 +78,13 @@ export const liveAccount = box => ({ id: box.id, name: box.provider === 'imap' ?
 export function connectionInfo(box) {
   if (box.provider === 'imap') return { type: 'IMAP / SMTP', host: box.settings?.imap?.host || '', port: String(box.settings?.imap?.port || 993), smtpHost: box.settings?.smtp?.host || '', smtpPort: String(box.settings?.smtp?.port || '') };
   return box.provider === 'google' ? { type: 'Gmail API', host: 'gmail.googleapis.com', port: '443' } : { type: 'Microsoft Graph', host: 'graph.microsoft.com', port: '443' };
+}
+
+/** Fetches a synced email's attachment from the mailbox and saves it as a file. */
+export async function downloadRemoteAttachment(bridge, accountId, att) {
+  const r = await bridge.attachment(accountId, att.remote.message, att.remote.id);
+  const bytes = Uint8Array.from(atob(r.data), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: r.type || 'application/octet-stream' }));
+  const a = document.createElement('a'); a.href = url; a.download = r.name || att.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

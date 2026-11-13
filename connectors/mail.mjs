@@ -10,6 +10,16 @@ async function api(url, token, init = {}) {
   if (!res.ok) throw new Error(`Provider request failed [${res.status}]: ${(await res.text()).slice(0, 300)}`);
   return res.status === 202 || res.status === 204 ? null : res.json();
 }
+const MAX_DOWNLOAD = 25 * 1024 * 1024;
+const fromB64Url = v => Buffer.from(String(v || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+/** Collects file parts (anything with a filename) from a Gmail payload tree. */
+export function gmailAttachments(part, out = []) {
+  if (!part) return out;
+  if (part.filename && part.body?.attachmentId) out.push({ id: part.body.attachmentId, name: part.filename, type: part.mimeType || 'application/octet-stream', size: part.body.size || 0 });
+  for (const p of part.parts || []) gmailAttachments(p, out);
+  return out;
+}
+const tooBig = () => Object.assign(new Error('attachment_too_large'), { status: 413 });
 const header = (headers, name) => headers?.find(h => h.name.toLowerCase() === name)?.value || '';
 
 export const mail = {
@@ -18,8 +28,16 @@ export const mail = {
     async inbox(token, max = 25) {
       const list = await api(`${GMAIL}/messages?labelIds=INBOX&maxResults=${max}`, token);
       // Small pages; a production sync should batch these and track historyId.
-      const msgs = await Promise.all((list.messages || []).map(m => api(`${GMAIL}/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`, token)));
-      return msgs.map(m => ({ id: m.id, from: header(m.payload.headers, 'from'), subject: header(m.payload.headers, 'subject'), date: new Date(Number(m.internalDate)).toISOString(), snippet: m.snippet, read: !m.labelIds?.includes('UNREAD') }));
+      const msgs = await Promise.all((list.messages || []).map(m => api(`${GMAIL}/messages/${m.id}?format=full`, token)));
+      return msgs.map(m => ({ id: m.id, from: header(m.payload.headers, 'from'), subject: header(m.payload.headers, 'subject'), date: new Date(Number(m.internalDate)).toISOString(), snippet: m.snippet, read: !m.labelIds?.includes('UNREAD'), attachments: gmailAttachments(m.payload) }));
+    },
+    async attachment(token, messageId, attachmentId) {
+      const msg = await api(`${GMAIL}/messages/${encodeURIComponent(messageId)}?format=full`, token);
+      const meta = gmailAttachments(msg.payload).find(a => a.id === attachmentId);
+      if (!meta) throw Object.assign(new Error('attachment_not_found'), { status: 404 });
+      if (meta.size > MAX_DOWNLOAD) throw tooBig();
+      const r = await api(`${GMAIL}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, token);
+      return { name: meta.name, type: meta.type, data: fromB64Url(r.data).toString('base64') };
     },
     async send(token, from, input) {
       const msg = normalizeOutgoing(input);
@@ -42,8 +60,15 @@ export const mail = {
   microsoft: {
     async profile(token) { const p = await api(`${GRAPH}?$select=mail,userPrincipalName`, token); return { email: p.mail || p.userPrincipalName }; },
     async inbox(token, max = 25) {
-      const r = await api(`${GRAPH}/mailFolders/inbox/messages?$top=${max}&$orderby=receivedDateTime desc&$select=id,from,subject,receivedDateTime,bodyPreview,isRead`, token);
-      return r.value.map(m => ({ id: m.id, from: m.from?.emailAddress?.address || '', subject: m.subject, date: m.receivedDateTime, snippet: m.bodyPreview, read: m.isRead }));
+      const r = await api(`${GRAPH}/mailFolders/inbox/messages?$top=${max}&$orderby=receivedDateTime desc&$select=id,from,subject,receivedDateTime,bodyPreview,isRead,hasAttachments`, token);
+      return Promise.all(r.value.map(async m => ({ id: m.id, from: m.from?.emailAddress?.address || '', subject: m.subject, date: m.receivedDateTime, snippet: m.bodyPreview, read: m.isRead,
+        attachments: m.hasAttachments ? ((await api(`${GRAPH}/messages/${encodeURIComponent(m.id)}/attachments?$select=id,name,contentType,size,isInline`, token)).value || []).filter(a => !a.isInline || a.name).map(a => ({ id: a.id, name: a.name || 'attachment', type: a.contentType || 'application/octet-stream', size: a.size || 0 })) : [] })));
+    },
+    async attachment(token, messageId, attachmentId) {
+      const a = await api(`${GRAPH}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, token);
+      if ((a.size || 0) > MAX_DOWNLOAD) throw tooBig();
+      if (!a.contentBytes) throw Object.assign(new Error('attachment_not_downloadable'), { status: 415 });
+      return { name: a.name || 'attachment', type: a.contentType || 'application/octet-stream', data: a.contentBytes };
     },
     async send(token, _from, input) {
       const msg = normalizeOutgoing(input);

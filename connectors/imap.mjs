@@ -14,6 +14,15 @@ export const IMAP_PRESETS = {
   aol: { name: 'AOL Mail', imap: { host: 'imap.aol.com', port: 993, security: 'ssl' }, smtp: { host: 'smtp.aol.com', port: 465, security: 'ssl' } },
 };
 
+/** Lists file parts in an IMAP BODYSTRUCTURE tree (parts with a filename or attachment disposition). */
+export function imapAttachments(node, out = []) {
+  if (!node) return out;
+  const name = node.dispositionParameters?.filename || node.parameters?.name;
+  if (node.part && (name || node.disposition === 'attachment') && !node.childNodes) out.push({ id: node.part, name: name || 'attachment', type: node.type || 'application/octet-stream', size: node.size || 0 });
+  for (const c of node.childNodes || []) imapAttachments(c, out);
+  return out;
+}
+
 const bad = code => Object.assign(new Error(code), { status: 400 });
 const isPrivate = ip => {
   if (net.isIPv4(ip)) {
@@ -77,14 +86,27 @@ export function createImapClient({ ImapFlow, nodemailer, allowPrivate = false })
         const lock = await c.getMailboxLock('INBOX');
         try {
           const total = c.mailbox.exists || 0;
-          if (total) for await (const m of c.fetch(`${Math.max(1, total - max + 1)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, bodyParts: ['TEXT'] }, { partial: true })) {
+          if (total) for await (const m of c.fetch(`${Math.max(1, total - max + 1)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, bodyStructure: true, bodyParts: ['TEXT'] }, { partial: true })) {
             const from = m.envelope?.from?.[0];
             const text = (m.bodyParts?.get('text') || m.bodyParts?.get('TEXT') || Buffer.alloc(0)).toString('utf8').slice(0, 2000);
-            out.push({ id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false });
+            out.push({ id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false, attachments: imapAttachments(m.bodyStructure) });
           }
         } finally { lock.release(); }
       } finally { await c.logout().catch(() => {}); }
       return out.reverse();
+    }),
+    attachment: wrap(async (s, uid, part) => {
+      if (!/^\d+$/.test(String(uid)) || !/^[\d.]+$/.test(String(part))) throw bad('attachment_not_found');
+      await assertPublic(s.imap.host, allowPrivate);
+      const c = imapClient(s); await c.connect();
+      try {
+        const lock = await c.getMailboxLock('INBOX');
+        try {
+          const { meta, content } = await c.download(String(uid), String(part), { uid: true, maxBytes: 25 * 1024 * 1024 });
+          const chunks = []; for await (const ch of content) chunks.push(ch);
+          return { name: meta?.filename || 'attachment', type: meta?.contentType || 'application/octet-stream', data: Buffer.concat(chunks).toString('base64') };
+        } finally { lock.release(); }
+      } finally { await c.logout().catch(() => {}); }
     }),
     send: wrap(async (s, input) => {
       const msg = normalizeOutgoing(input);

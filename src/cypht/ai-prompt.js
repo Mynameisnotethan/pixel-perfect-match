@@ -27,7 +27,7 @@ API description: ${schema}`;
 export function buildMcpSetup({ endpoint, keyName }) {
   const url = `${endpoint}/mcp`;
   const local = /\/\/(127\.0\.0\.1|localhost)/.test(endpoint);
-  return `Lockbox MCP server (read-only, reviewed emails only; hidden parts show as [hidden: Label])
+  return `Lockbox MCP server (reviewed emails only; hidden parts show as [hidden: Label]; this key's permissions decide whether drafts and sending are allowed)
 URL: ${url}
 Key: the "${keyName}" key (starts with lbx_). Never paste it into a chat.
 ${local ? `\nThis address only works on this computer while Lockbox is open, so ChatGPT on the web cannot use it.\n` : `
@@ -39,5 +39,5 @@ Claude Desktop / Cursor / other MCP clients: add a remote (Streamable HTTP) serv
 Cursor example (~/.cursor/mcp.json):
 { "mcpServers": { "lockbox": { "url": "${url}", "headers": { "Authorization": "Bearer \${env:LOCKBOX_KEY}" } } } }
 
-Tools: list_messages (limit, mailbox), get_message (id). Deleting the key in Lockbox disconnects every app using it.`;
+Tools: list_messages (limit, mailbox), get_message (id); with Manage drafts: create_draft, update_draft; with Send email: send_draft (always waits for your approval in Lockbox). After changing permissions, refresh the connector in your AI app so it sees the new tools. Deleting the key in Lockbox disconnects every app using it.`;
 }

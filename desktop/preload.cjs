@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('lockboxMailboxes', {
   send: (id, msg) => ipcRenderer.invoke('mailbox:send', id, msg),
   imap: { test: s => ipcRenderer.invoke('mailbox:imapTest', s), save: s => ipcRenderer.invoke('mailbox:imapSave', s) },
   disconnect: id => ipcRenderer.invoke('mailbox:disconnect', id),
-  aiKeys: { list: () => ipcRenderer.invoke('aiKeys:list'), create: name => ipcRenderer.invoke('aiKeys:create', name), remove: id => ipcRenderer.invoke('aiKeys:remove', id) },
+  aiKeys: { list: () => ipcRenderer.invoke('aiKeys:list'), create: name => ipcRenderer.invoke('aiKeys:create', name), remove: id => ipcRenderer.invoke('aiKeys:remove', id), setPerms: (id, perms) => ipcRenderer.invoke('aiKeys:setPerms', id, perms) },
   privacy: { get: () => ipcRenderer.invoke('privacy:get'), put: body => ipcRenderer.invoke('privacy:put', body) },
   aiEndpoint: () => ipcRenderer.invoke('ai:endpoint'),
   // Renderer data is encrypted and compressed by the main process; plaintext never crosses the bridge.

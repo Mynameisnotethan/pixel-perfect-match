@@ -30,10 +30,50 @@ export const MCP_TOOLS = [
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   },
 ];
-const INSTRUCTIONS = 'Read-only access to the owner\'s Lockbox mailbox. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. You cannot send, delete or change email.';
+const addrList = d => ({ anyOf: [{ type: 'string', maxLength: 20000 }, { type: 'array', maxItems: 100, items: { type: 'string', maxLength: 320 } }], description: d });
+export const DRAFT_TOOLS = [
+  {
+    name: 'create_draft', title: 'Create email draft',
+    description: 'Create a draft in one of the owner\'s Gmail or Outlook mailboxes, either a new email or a reply to a reviewed email. Returns the draft id and a preview. Replies go to the original sender only unless reply_all is true or you add recipients; the original is never quoted.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {
+      mailbox: { type: 'string', maxLength: 300, description: 'Sending mailbox id, e.g. google:me@gmail.com. Optional for replies.' },
+      reply_to_message_id: { type: 'string', maxLength: 400, description: 'id of a reviewed email (from list_messages) to reply to.' },
+      reply_all: { type: 'boolean', description: 'Reply to everyone on the original email. Only when the owner asked for it.' },
+      to: addrList('Recipients (added to the original sender for replies).'), cc: addrList('CC recipients.'), bcc: addrList('BCC recipients.'),
+      subject: { type: 'string', maxLength: 998, description: 'Subject. For replies, defaults to "Re: " + the original subject.' },
+      body: { type: 'string', maxLength: 200000, description: 'Plain-text body.' },
+    } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  {
+    name: 'update_draft', title: 'Edit email draft',
+    description: 'Change a draft made with create_draft. Only the fields you pass change. Any change cancels an earlier send approval.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: {
+      draft_id: { type: 'string', maxLength: 100 }, mailbox: { type: 'string', maxLength: 300, description: 'Move a new (non-reply) draft to another mailbox.' },
+      to: addrList('Replaces the recipients you added.'), cc: addrList('Replaces CC recipients you added.'), bcc: addrList('Replaces BCC recipients.'),
+      subject: { type: 'string', maxLength: 998 }, body: { type: 'string', maxLength: 200000 },
+    } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+];
+export const SEND_TOOL = {
+  name: 'send_draft', title: 'Send approved draft',
+  description: 'Send a draft once the owner has approved this exact version in Lockbox. If not approved yet, returns status approval_required and an approval_url for the owner; nothing is sent. Safe to call again: an approved version is sent at most once.',
+  inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: {
+    draft_id: { type: 'string', maxLength: 100 }, version: { type: 'integer', minimum: 1, description: 'The version shown to the owner. Send fails if the draft changed.' },
+  } },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+};
+/** Tools this key may use. */
+export const toolsFor = (perms = {}, drafts = null) => [
+  ...(perms.read !== false ? MCP_TOOLS : []),
+  ...(drafts && perms.drafts ? DRAFT_TOOLS : []),
+  ...(drafts && perms.send ? [SEND_TOOL] : []),
+];
+const INSTRUCTIONS = 'Access to the owner\'s Lockbox mailbox, limited by what their API key allows. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. Some keys may also create and edit drafts; sending always needs the owner to approve the exact email in Lockbox. Never claim an email was sent unless send_draft returned status sent.';
 
 /** Pure JSON-RPC handling for one MCP message. Returns a response object, or null for notifications. */
-export async function handleMcpMessage(msg, { user, feedFor }) {
+export async function handleMcpMessage(msg, { user, feedFor, perms = { read: true }, keyId = null, drafts = null, base = '' }) {
   const ok = result => ({ jsonrpc: '2.0', id: msg.id, result });
   const fail = (code, message) => ({ jsonrpc: '2.0', id: msg?.id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return fail(-32600, 'Invalid request');
@@ -47,11 +87,23 @@ export async function handleMcpMessage(msg, { user, feedFor }) {
       instructions: INSTRUCTIONS,
     });
     case 'ping': return ok({});
-    case 'tools/list': return ok({ tools: MCP_TOOLS });
+    case 'tools/list': return ok({ tools: toolsFor(perms, drafts) });
     case 'tools/call': {
       const a = p.arguments || {};
       const toolErr = text => ok({ content: [{ type: 'text', text }], isError: true });
       if (typeof a !== 'object' || Array.isArray(a)) return toolErr('Arguments must be an object.');
+      const allowed = toolsFor(perms, drafts).map(t => t.name);
+      if ([...MCP_TOOLS, ...DRAFT_TOOLS, SEND_TOOL].some(t => t.name === p.name) && !allowed.includes(p.name)) return toolErr('This API key is not allowed to use that tool. The owner can change key permissions in Lockbox → AI Access.');
+      const draftCall = async (fn, keys) => {
+        const extra = Object.keys(a).filter(k => !keys.includes(k));
+        if (extra.length) return toolErr(`Unknown argument: ${extra[0]}`);
+        try { const r = await fn(); return ok({ content: [{ type: 'text', text: JSON.stringify(r) }], structuredContent: r }); }
+        catch (e) { if (e.status && e.status < 500 || e.status === 502) return toolErr(e.message); throw e; }
+      };
+      const who = { user, keyId, perms };
+      if (p.name === 'create_draft') return draftCall(() => drafts.create(who, a), ['mailbox', 'reply_to_message_id', 'reply_all', 'to', 'cc', 'bcc', 'subject', 'body']);
+      if (p.name === 'update_draft') return draftCall(() => drafts.update(who, a), ['draft_id', 'mailbox', 'to', 'cc', 'bcc', 'subject', 'body']);
+      if (p.name === 'send_draft') return draftCall(() => drafts.send(who, a, { approvalUrl: id => `${base}/api/ai/approve/${encodeURIComponent(id)}` }), ['draft_id', 'version']);
       if (p.name === 'list_messages') {
         const extra = Object.keys(a).filter(k => !['limit', 'mailbox'].includes(k));
         if (extra.length) return toolErr(`Unknown argument: ${extra[0]}`);
@@ -90,12 +142,12 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const authorizePage = (q, error) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to Lockbox</title>
 <style>body{font-family:system-ui,sans-serif;background:#f4f6f6;color:#1d2b2b;display:grid;place-items:center;min-height:100vh;margin:0}form{background:#fff;padding:28px;border-radius:12px;max-width:420px;width:90%;box-shadow:0 4px 20px #0001}h1{font-size:20px;margin:0 0 8px}p{color:#4c5b5b;font-size:14px}input[type=password]{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9d3d3;border-radius:8px;font:inherit}button{margin-top:14px;width:100%;padding:10px;border:0;border-radius:8px;background:#0f766e;color:#fff;font:inherit;cursor:pointer}.err{color:#b42318}</style></head>
 <body><form method="post" action="/api/ai/v1/oauth/authorize"><h1>Connect an AI app to Lockbox</h1>
-<p><strong>${esc(q.client_name || 'An AI app')}</strong> wants read-only access to your reviewed emails. Hidden parts stay hidden.</p>
+<p><strong>${esc(q.client_name || 'An AI app')}</strong> wants to use your Lockbox mailbox with the permissions of the key below (by default: read reviewed emails only). Hidden parts stay hidden, and nothing is sent without your approval.</p>
 <p>Paste a Lockbox API key (from AI Access). Deleting that key later disconnects this app.</p>
 ${error ? `<p class="err">${esc(error)}</p>` : ''}
 ${['client_id', 'redirect_uri', 'state', 'code_challenge', 'code_challenge_method', 'scope', 'resource'].map(k => `<input type="hidden" name="${k}" value="${esc(q[k] || '')}">`).join('')}
 <input type="password" name="api_key" placeholder="lbx_..." autocomplete="off" required autofocus>
-<button type="submit">Allow read-only access</button></form></body></html>`;
+<button type="submit">Allow access</button></form></body></html>`;
 
 const readBody = req => new Promise((resolve, reject) => {
   let size = 0; const chunks = [];
@@ -109,7 +161,9 @@ const validRedirect = u => { try { const x = new URL(u); return x.protocol === '
  * MCP + OAuth routes. Returns true when the request was handled.
  * verifyKey(lbxKey) -> user|null. feedFor(user, opts) -> redacted feed. oauth: store or null to disable.
  */
-export function createMcpRoutes({ verifyKey, feedFor, limit, oauth = null }) {
+export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, oauth = null, drafts = null }) {
+  // inspectKey returns { user, keyId, perms }; without it every key is read-only.
+  const who = async key => { if (inspectKey) return inspectKey(key); const user = await verifyKey(key); return user ? { user, keyId: null, perms: { read: true, drafts: false, send: false } } : null; };
   const head = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
   const json = (res, status, body, extra = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', ...head, ...extra }); res.end(body === undefined ? '' : JSON.stringify(body)); };
   const originOf = (req, url) => {
@@ -121,14 +175,14 @@ export function createMcpRoutes({ verifyKey, feedFor, limit, oauth = null }) {
     issuer: base, authorization_endpoint: `${base}/api/ai/v1/oauth/authorize`, token_endpoint: `${base}/api/ai/v1/oauth/token`,
     registration_endpoint: `${base}/api/ai/v1/oauth/register`, response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'],
-    token_endpoint_auth_methods_supported: ['none'], scopes_supported: ['mail.read'],
+    token_endpoint_auth_methods_supported: ['none'], scopes_supported: ['mail.read', 'mail.draft', 'mail.send'],
   });
   const resolveUser = async bearer => {
-    if (/^lbx_/.test(bearer)) return verifyKey(bearer);
+    if (/^lbx_/.test(bearer)) return who(bearer);
     if (!oauth) return null;
     const t = (await oauth.get()).tokens[sha(bearer)];
     if (!t || t.kind !== 'access' || t.exp < Date.now()) return null;
-    return verifyKey(t.key); // key deleted -> null
+    return who(t.key); // key deleted -> null; permissions are re-read from the key on every call
   };
 
   return async (req, res, url) => {
@@ -136,7 +190,7 @@ export function createMcpRoutes({ verifyKey, feedFor, limit, oauth = null }) {
     const base = originOf(req, url);
     // Discovery (RFC 9728 / RFC 8414), at root and path-suffixed variants clients try.
     if (oauth && req.method === 'GET' && (p === prmPath || p === `${prmPath}/api/ai/v1/mcp` || p === '/api/ai/v1/oauth/protected-resource')) {
-      json(res, 200, { resource: `${base}/api/ai/v1/mcp`, authorization_servers: [base], scopes_supported: ['mail.read'], bearer_methods_supported: ['header'], resource_name: 'Lockbox' }); return true;
+      json(res, 200, { resource: `${base}/api/ai/v1/mcp`, authorization_servers: [base], scopes_supported: ['mail.read', 'mail.draft', 'mail.send'], bearer_methods_supported: ['header'], resource_name: 'Lockbox' }); return true;
     }
     if (oauth && req.method === 'GET' && ['/.well-known/oauth-authorization-server', '/.well-known/openid-configuration', '/api/ai/v1/oauth/metadata'].includes(p)) { json(res, 200, asMeta(base)); return true; }
 
@@ -150,12 +204,13 @@ export function createMcpRoutes({ verifyKey, feedFor, limit, oauth = null }) {
       const bearer = (/^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '') || [])[1];
       if (!bearer) { json(res, 401, { error: 'api_key_required' }, challenge); return true; }
       if (!limit('k:' + bearer.slice(-12))) { json(res, 429, { error: 'rate_limited' }); return true; }
-      const user = await resolveUser(bearer);
+      const caller = await resolveUser(bearer);
+      const user = caller?.user;
       if (!user) { json(res, 401, { error: 'invalid_token' }, { 'WWW-Authenticate': challenge['WWW-Authenticate'] ? `${challenge['WWW-Authenticate']}, error="invalid_token"` : 'Bearer error="invalid_token"' }); return true; }
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return true; }
       const batch = Array.isArray(body) ? body.slice(0, 20) : [body];
-      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, feedFor })))).filter(Boolean);
+      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, feedFor, drafts, base })))).filter(Boolean);
       if (!out.length) { res.writeHead(202, head).end(); return true; }
       json(res, 200, Array.isArray(body) ? out : out[0]); return true;
     }
@@ -193,7 +248,7 @@ export function createMcpRoutes({ verifyKey, feedFor, limit, oauth = null }) {
         const access = rand(), refresh = rand(), now = Date.now();
         d.tokens[sha(access)] = { kind: 'access', key, client_id, exp: now + ACCESS_TTL };
         d.tokens[sha(refresh)] = { kind: 'refresh', key, client_id, exp: now + REFRESH_TTL };
-        return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL / 1000, refresh_token: refresh, scope: 'mail.read' };
+        return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL / 1000, refresh_token: refresh, scope: 'mail.read mail.draft mail.send' };
       };
       const out = await oauth.mutate(async d => {
         if (b.grant_type === 'authorization_code') {

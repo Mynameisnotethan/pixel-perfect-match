@@ -24,7 +24,7 @@ export async function startDeviceCode(clientId) {
 export async function pollDeviceCode(clientId, deviceCode) {
   const res = await fetch(getProvider('microsoft').tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:device_code', client_id: clientId, device_code: deviceCode }) });
   const json = await res.json().catch(() => ({}));
-  if (res.ok) return { status: 'done', tokens: { accessToken: json.access_token, refreshToken: json.refresh_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000 } };
+  if (res.ok) return { status: 'done', tokens: { accessToken: json.access_token, refreshToken: json.refresh_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000, ...(json.scope ? { scope: json.scope } : {}) } };
   if (json.error === 'authorization_pending') return { status: 'pending' };
   if (json.error === 'slow_down') return { status: 'slow_down' };
   throw new Error(deviceError(json));

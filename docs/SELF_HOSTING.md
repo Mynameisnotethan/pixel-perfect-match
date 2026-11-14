@@ -106,7 +106,13 @@ Server: `https://YOUR-DOMAIN/api/ai/v1/messages` with `Authorization: Bearer lbx
 
 ## Connect AI apps with MCP
 
-Lockbox has a built-in MCP server at `https://<your-domain>/api/ai/v1/mcp`. It is read-only and only returns emails you have reviewed, with hidden parts already replaced.
+Lockbox has a built-in MCP server at `https://<your-domain>/api/ai/v1/mcp`. It only returns emails you have reviewed, with hidden parts already replaced. Each key is read-only until you allow more in AI Access:
+
+- **Read reviewed emails** (on by default): `list_messages`, `get_message`.
+- **Manage drafts**: `create_draft`, `update_draft` save drafts in your Gmail or Outlook. Replies thread with the original, go to the sender only unless reply-all is asked for, and never quote the original.
+- **Send email**: `send_draft`. Nothing is sent until you approve that exact email on the Lockbox approval page (the agent gets the link), or in the native dialog on desktop. Any edit cancels the approval. Each approved version is sent once; if the provider's answer is unclear, Lockbox checks whether it went out before trying again.
+- Gmail and Outlook mailboxes connected before this feature need one more sign-in: Mailboxes → **Allow AI drafts**. Reading keeps working until then.
+- After changing permissions, refresh the connector in ChatGPT (or reconnect in other apps) so it sees the new tools.
 
 - **ChatGPT:** go to Settings, then Apps & Connectors, then Create (Developer mode). Paste the URL and choose OAuth. A Lockbox page opens: paste an `lbx_` key from AI Access there and click Allow.
 - **Claude Desktop, Cursor and others:** add a remote (Streamable HTTP) server with that URL and the header `Authorization: Bearer lbx_...`.

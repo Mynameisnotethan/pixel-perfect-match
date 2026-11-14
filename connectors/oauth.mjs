@@ -38,21 +38,30 @@ async function tokenRequest(providerId, params, clientSecret) {
     if (json.error === 'invalid_grant' || json.error === 'interaction_required') throw new ReconnectRequired(json.error);
     throw new Error(`Token request failed [${res.status}]: ${json.error || 'unknown_error'}`);
   }
-  return { accessToken: json.access_token, refreshToken: json.refresh_token || params.refresh_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000 };
+  return { accessToken: json.access_token, refreshToken: json.refresh_token || params.refresh_token, expiresAt: Date.now() + (json.expires_in || 3600) * 1000, ...(json.scope ? { scope: json.scope } : {}) };
 }
 
 export const exchangeCode = (providerId, { code, verifier, clientId, clientSecret, redirectUri }) =>
   tokenRequest(providerId, { grant_type: 'authorization_code', code, code_verifier: verifier, client_id: clientId, redirect_uri: redirectUri }, clientSecret);
 
-export const refreshTokens = (providerId, { refreshToken, clientId, clientSecret }) => {
+// Refresh asks only for what was granted before (or the older scope set when that is unknown), so adding a
+// scope to new sign-ins never breaks reading on an existing connection.
+export const refreshScope = (providerId, granted) => {
+  const p = getProvider(providerId);
+  const list = granted ? String(granted).split(/\s+/).filter(Boolean) : (p.legacyScopes || p.scopes);
+  if (providerId === 'microsoft' && !list.includes('offline_access')) list.push('offline_access');
+  return list.join(' ');
+};
+export const refreshTokens = (providerId, { refreshToken, clientId, clientSecret, scope }) => {
   if (!refreshToken) throw new ReconnectRequired('missing_refresh_token');
-  return tokenRequest(providerId, { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, scope: getProvider(providerId).scopes.join(' ') }, clientSecret);
+  return tokenRequest(providerId, { grant_type: 'refresh_token', refresh_token: refreshToken, client_id: clientId, scope: refreshScope(providerId, scope) }, clientSecret);
 };
 
 /** Returns a valid access token, refreshing (and persisting via save) when within 60s of expiry. */
 export async function ensureFresh(providerId, tokens, client, save) {
   if (tokens.accessToken && tokens.expiresAt - 60_000 > Date.now()) return tokens;
-  const next = await refreshTokens(providerId, { refreshToken: tokens.refreshToken, ...client });
+  const fresh = await refreshTokens(providerId, { refreshToken: tokens.refreshToken, ...client, scope: tokens.scope });
+  const next = { ...fresh, ...(fresh.scope || tokens.scope ? { scope: fresh.scope || tokens.scope } : {}) };
   await save(next);
   return next;
 }

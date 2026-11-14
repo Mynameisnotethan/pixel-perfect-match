@@ -1,6 +1,6 @@
 // Lockbox desktop shell (Electron). OAuth runs in the native process:
 // system browser + PKCE + loopback callback; tokens live in the OS credential vault (keytar).
-import { app, BrowserWindow, ipcMain, shell, protocol, net, session } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, protocol, net, session, dialog } from 'electron';
 import { pathToFileURL } from 'node:url';
 import http from 'node:http';
 import path from 'node:path';
@@ -14,6 +14,8 @@ import { createImapClient, normalizeImap } from './connectors/imap.mjs';
 import { createKeyStore } from './connectors/keystore.mjs';
 import { createAiRoutes, buildFeed, cleanPrivacy } from './connectors/ai-feed.mjs';
 import { createSecureStore } from './secure-store.mjs';
+import { createDraftService } from './connectors/ai-drafts.mjs';
+import { aiCapabilities } from './connectors/providers.mjs';
 // The desktop runs on the user's own computer, so home-network mail servers are allowed.
 const imap = createImapClient({ ImapFlow, nodemailer, allowPrivate: true });
 
@@ -70,7 +72,7 @@ async function connect(providerId) {
   const code = await codePromise;
   const tokens = await exchangeCode(providerId, { code, verifier, redirectUri, ...client });
   const { email } = await mail[providerId].profile(tokens.accessToken);
-  const list = upsertMailbox(await readIndex(), { id: `${providerId}:${email.toLowerCase()}`, provider: providerId, email, status: 'connected' });
+  const list = upsertMailbox(await readIndex(), { id: `${providerId}:${email.toLowerCase()}`, provider: providerId, email, status: 'connected', aiDrafts: aiCapabilities(providerId, tokens.scope).drafts });
   const box = list.find(b => b.provider === providerId && b.email.toLowerCase() === email.toLowerCase());
   await saveTokens(box.id, tokens); await writeIndex(list);
   return box;
@@ -123,6 +125,7 @@ const aiEndpoint = `http://127.0.0.1:${AI_PORT}/api/ai/v1`;
 on('aiKeys:list', () => aiKeys.list(LOCAL_USER));
 on('aiKeys:create', name => aiKeys.create(LOCAL_USER, name));
 on('aiKeys:remove', id => aiKeys.remove(LOCAL_USER, id));
+on('aiKeys:setPerms', (id, perms) => aiKeys.setPerms(LOCAL_USER, id, perms));
 on('privacy:get', () => privacyVault.read());
 on('privacy:put', body => privacyVault.write(cleanPrivacy(body)));
 on('ai:endpoint', () => aiEndpoint);
@@ -134,12 +137,26 @@ const validStoreKey = key => {
 on('store:get', (key, fallback) => privateStore.get(validStoreKey(key), fallback));
 on('store:put', (key, value) => privateStore.put(validStoreKey(key), value));
 on('store:remove', keys => privateStore.remove(keys.map(validStoreKey)));
+const feedLocal = async (_user, { mailbox } = {}) => buildFeed({
+  boxes: await readIndex(), mailbox, privacy: await privacyVault.read(),
+  fetchInbox: box => withToken(box.id, (t, b, s) => b.provider === 'imap' ? imap.inbox(s) : mail[b.provider].inbox(t)),
+});
+const draftVault = vaultJson('aidrafts', '{}');
+const bind = (provider, t) => Object.fromEntries(['replyContext', 'createDraft', 'updateDraft', 'deleteDraft', 'sendDraft', 'draftExists'].map(k => [k, (...a) => mail[provider][k](t, ...a)]));
+// Desktop approval is a native dialog the agent cannot click: it shows the exact email and defaults to "Don't send".
+const confirmSend = async d => {
+  const win = BrowserWindow.getAllWindows()[0];
+  const detail = `From: ${d.from}\nTo: ${d.to || '—'}\nCC: ${d.cc || '—'}\nBCC: ${d.bcc || '—'}\nSubject: ${d.subject || '(no subject)'}\n\n${d.body.length > 4000 ? d.body.slice(0, 4000) + '\n…(open the draft in your mailbox to read the rest)' : d.body}`;
+  const r = await dialog.showMessageBox(win, { type: 'question', buttons: ["Don't send", 'Send this email'], defaultId: 0, cancelId: 0, noLink: true, title: 'Lockbox', message: 'An AI agent wants to send this email. Send it?', detail });
+  return r.response === 1;
+};
+const aiDrafts = createDraftService({
+  read: draftVault.read, write: draftVault.write, feedFor: feedLocal, confirm: confirmSend,
+  withMailbox: async (_owner, id, fn) => { const scope = (await tokensFor(id))?.scope; return withToken(id, (t, b) => fn(b.provider === 'imap' ? null : bind(b.provider, t), { ...b, caps: aiCapabilities(b.provider, scope) })); },
+});
 const aiRoutes = createAiRoutes({
-  verifyKey: key => aiKeys.verify(key),
-  feedFor: async (_user, { mailbox }) => buildFeed({
-    boxes: await readIndex(), mailbox, privacy: await privacyVault.read(),
-    fetchInbox: box => withToken(box.id, (t, b, s) => b.provider === 'imap' ? imap.inbox(s) : mail[b.provider].inbox(t)),
-  }),
+  verifyKey: key => aiKeys.verify(key), inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
+  feedFor: feedLocal,
 });
 // Loopback only: other computers on the network cannot reach it. Browsers are refused (no CORS, Origin checked).
 function startAiServer() {

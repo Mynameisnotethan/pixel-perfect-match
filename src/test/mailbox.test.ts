@@ -32,9 +32,9 @@ describe('OAuth', () => {
     const url = new URL(buildAuthUrl('google', { clientId: 'cid', redirectUri: 'http://127.0.0.1:5000/callback', challenge, state }));
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(url.searchParams.get('state')).toBe(state);
-    expect(url.searchParams.get('scope')).toBe('openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send');
+    expect(url.searchParams.get('scope')).toBe('openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose');
     const ms = new URL(buildAuthUrl('microsoft', { clientId: 'cid', redirectUri: 'r', challenge, state }));
-    expect(ms.searchParams.get('scope')).toBe('openid email offline_access User.Read Mail.Read Mail.Send');
+    expect(ms.searchParams.get('scope')).toBe('openid email offline_access User.Read Mail.Read Mail.Send Mail.ReadWrite');
   });
   it('rejects a mismatched state', () => {
     expect(stateMatches('abc', 'abc')).toBe(true);

@@ -20,6 +20,9 @@ import { createOAuthStore } from '../connectors/ai-mcp.mjs';
 import { createPrivacyStore } from './privacy-store.mjs';
 import { createAiRoutes, buildFeed } from '../connectors/ai-feed.mjs';
 import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
+import { createDraftService } from '../connectors/ai-drafts.mjs';
+import { aiCapabilities } from '../connectors/providers.mjs';
+import { approvePage, approvedPage, messagePage, reloadPage } from './approve-page.mjs';
 
 const env = process.env;
 const DATA_DIR = env.LOCKBOX_DATA_DIR || '/data';
@@ -73,7 +76,7 @@ const devices = new Map(); // handle -> { user, clientId, deviceCode, expiresAt 
 const pending = new Map(); // state -> { verifier, provider, user, at }
 
 // ---- request helpers
-const publicBox = ({ tokens, authClientId, imap: settings, ...b }) => (settings ? { ...b, settings: { username: settings.username, name: settings.name, imap: settings.imap, smtp: settings.smtp, hasPassword: !!settings.password } } : b);
+const publicBox = ({ tokens, authClientId, imap: settings, ...b }) => (b.provider !== 'imap' ? { ...b, aiDrafts: aiCapabilities(b.provider, tokens?.scope).drafts } : settings ? { ...b, settings: { username: settings.username, name: settings.name, imap: settings.imap, smtp: settings.smtp, hasPassword: !!settings.password } } : b);
 const send = (res, status, body, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(body === undefined ? '' : JSON.stringify(body)); };
 const readJson = (req, limit = 1e6) => new Promise((ok, bad) => {
   let s = '';
@@ -111,14 +114,31 @@ async function withToken(user, id, fn) {
   }
 }
 
+// AI drafts run against the key owner's own mailboxes only (withToken looks the box up under that user).
+const draftOps = (provider, token) => ({
+  replyContext: id => mail[provider].replyContext(token, id),
+  createDraft: (from, d) => mail[provider].createDraft(token, from, d),
+  updateDraft: (from, pid, d) => mail[provider].updateDraft(token, from, pid, d),
+  deleteDraft: pid => mail[provider].deleteDraft(token, pid),
+  sendDraft: pid => mail[provider].sendDraft(token, pid),
+  draftExists: pid => mail[provider].draftExists(token, pid),
+});
+const feedForOwner = async (owner, { mailbox } = {}) => buildFeed({
+  boxes: (await load())[owner] || [], mailbox, privacy: await privacy.get(owner),
+  fetchInbox: box => withToken(owner, box.id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)),
+});
+const draftFile = encryptedFile({ file: path.join(DATA_DIR, 'ai-drafts.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) });
+const aiDrafts = createDraftService({
+  read: draftFile.read, write: draftFile.write, feedFor: feedForOwner,
+  withMailbox: (owner, id, fn) => withToken(owner, id, (t, b) => fn(b.provider === 'imap' ? null : draftOps(b.provider, t), { ...b, caps: aiCapabilities(b.provider, b.tokens?.scope) })),
+});
+
 // AI agents: a personal API key maps to exactly one user; only that user's mailboxes and rules are used.
 const aiRoutes = createAiRoutes({
+  inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
   oauth: createOAuthStore(encryptedFile({ file: path.join(DATA_DIR, 'mcp-oauth.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) })),
   verifyKey: key => aiKeys.verify(key),
-  feedFor: async (owner, { mailbox }) => buildFeed({
-    boxes: (await load())[owner] || [], mailbox, privacy: await privacy.get(owner),
-    fetchInbox: box => withToken(owner, box.id, (t, b) => b.provider === 'imap' ? imap.inbox(b.imap) : mail[b.provider].inbox(t)),
-  }),
+  feedFor: feedForOwner,
 });
 
 http.createServer(async (req, res) => {
@@ -130,7 +150,8 @@ http.createServer(async (req, res) => {
   const secure = secureCookies(req);
   try {
     // State-changing calls from a signed-in browser must echo the session's CSRF token.
-    if (session && !url.pathname.startsWith('/api/ai/v1/') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.headers[CSRF_COOKIE] !== session.csrf
+    // The approval form checks its own CSRF field (a plain form cannot send headers).
+    if (session && !url.pathname.startsWith('/api/ai/v1/') && !url.pathname.startsWith('/api/ai/approve/') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.headers[CSRF_COOKIE] !== session.csrf
       && req.headers['x-lockbox-csrf'] !== session.csrf) return send(res, 403, { error: 'csrf_check_failed' });
 
     let m;
@@ -229,11 +250,24 @@ http.createServer(async (req, res) => {
       if (req.method === 'PUT') { await privacy.put(user, await readJson(req)); return send(res, 204); }
       return send(res, 405, { error: 'method_not_allowed' });
     }
+    if ((m = url.pathname.match(/^\/api\/ai\/approve\/([A-Za-z0-9_-]{1,100})$/))) {
+      const html = (status, body) => { res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'" }); res.end(body); };
+      if (!user) return url.searchParams.get('s') ? html(401, messagePage('Sign in first', 'Sign in to Lockbox in this browser, then open the approval link again.')) : html(200, reloadPage());
+      const d = await aiDrafts.ownerView(user, m[1]);
+      if (!d) return html(404, messagePage('Not found', 'This draft does not exist or belongs to another account.'));
+      if (req.method === 'GET') return html(200, d.approved || d.sent ? approvedPage(d) : approvePage(d, session.csrf));
+      if (req.method !== 'POST') return html(405, messagePage('Not allowed', 'Use the approval button.'));
+      const form = Object.fromEntries(new URLSearchParams(await new Promise((ok, bad) => { let s2 = ''; req.on('data', c => { s2 += c; if (s2.length > 4096) req.destroy(); }); req.on('end', () => ok(s2)); req.on('error', bad); })));
+      if (form.csrf !== session.csrf) return html(403, messagePage('Expired', 'Reload the approval page and try again.'));
+      try { return html(200, approvedPage(await aiDrafts.approve(user, m[1], String(form.hash || '')))); }
+      catch (e) { if (e.status === 409) return html(409, approvePage(await aiDrafts.ownerView(user, m[1]), session.csrf, e.message)); throw e; }
+    }
     if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const keyId = decodeURIComponent(url.pathname.slice('/api/ai/keys/'.length) || '');
       if (req.method === 'GET' && !keyId) return send(res, 200, await aiKeys.list(user));
       if (req.method === 'POST' && !keyId) return send(res, 201, await aiKeys.create(user, (await readJson(req)).name));
+      if (req.method === 'PATCH' && keyId) { const k = await aiKeys.setPerms(user, keyId, (await readJson(req)).perms); return k ? send(res, 200, k) : send(res, 404, { error: 'not_found' }); }
       if (req.method === 'DELETE' && keyId) return (await aiKeys.remove(user, keyId)) ? send(res, 204) : send(res, 404, { error: 'not_found' });
       return send(res, 405, { error: 'method_not_allowed' });
     }

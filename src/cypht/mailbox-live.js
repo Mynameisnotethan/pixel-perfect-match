@@ -32,6 +32,7 @@ const webBridge = {
     list: () => api('/api/ai/keys'),
     create: name => api('/api/ai/keys', { method: 'POST', body: JSON.stringify({ name }) }),
     remove: id => api(`/api/ai/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    setPerms: (id, perms) => api(`/api/ai/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ perms }) }),
   },
   // Gmail (and Outlook when the admin set up a web app): the browser goes to the provider and back.
   // Outlook otherwise uses a one-time code, so no Entra app is needed on this server.
@@ -70,7 +71,7 @@ export const liveBridge = () => {
   return import.meta.env?.VITE_LOCKBOX_MAIL_API === '1' ? webBridge : null;
 };
 
-export { parseFrom, inboxToMessages } from '../../connectors/ai-feed.mjs';
+export { parseFrom, inboxToMessages } from '../../connectors/feed-core.mjs';
 
 export const liveAccount = box => ({ id: box.id, name: box.provider === 'imap' ? (box.settings?.name || box.email.split('@')[1]) : MAILBOX_PROVIDERS[box.provider].name, email: box.email, color: MAILBOX_PROVIDERS[box.provider].color, ...connectionInfo(box), live: true });
 

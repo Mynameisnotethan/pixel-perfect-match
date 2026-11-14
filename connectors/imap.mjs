@@ -1,4 +1,5 @@
 // IMAP (read) + SMTP (send) for providers other than Gmail and Outlook.
+import { htmlToText, clampText, imapTextPart, MAX_TEXT } from './mail-text.mjs';
 // Only encrypted connections are allowed; hosts on private/loopback networks are refused
 // so a signed-in user cannot make the server probe its own network.
 import net from 'node:net';
@@ -89,7 +90,19 @@ export function createImapClient({ ImapFlow, nodemailer, allowPrivate = false })
           if (total) for await (const m of c.fetch(`${Math.max(1, total - max + 1)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, bodyStructure: true, bodyParts: ['TEXT'] }, { partial: true })) {
             const from = m.envelope?.from?.[0];
             const text = (m.bodyParts?.get('text') || m.bodyParts?.get('TEXT') || Buffer.alloc(0)).toString('utf8').slice(0, 2000);
-            out.push({ id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false, attachments: imapAttachments(m.bodyStructure) });
+            out.push({ uid: m.uid, textPart: imapTextPart(m.bodyStructure), id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false, attachments: imapAttachments(m.bodyStructure) });
+          }
+          // Full readable text for each email (download decodes transfer encoding and charset).
+          for (const item of out) {
+            const tp = item.textPart; delete item.textPart; const uid = item.uid; delete item.uid;
+            item.body = item.snippet;
+            if (!tp) continue;
+            try {
+              const { content } = await c.download(String(uid), tp.part, { uid: true, maxBytes: MAX_TEXT * 2 });
+              const chunks = []; for await (const ch of content) chunks.push(ch);
+              const raw = Buffer.concat(chunks).toString('utf8');
+              item.body = clampText(tp.html ? htmlToText(raw) : raw) || item.snippet;
+            } catch { /* keep the preview */ }
           }
         } finally { lock.release(); }
       } finally { await c.logout().catch(() => {}); }

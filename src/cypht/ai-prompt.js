@@ -39,5 +39,5 @@ Claude Desktop / Cursor / other MCP clients: add a remote (Streamable HTTP) serv
 Cursor example (~/.cursor/mcp.json):
 { "mcpServers": { "lockbox": { "url": "${url}", "headers": { "Authorization": "Bearer \${env:LOCKBOX_KEY}" } } } }
 
-Tools: list_messages (limit, mailbox), get_message (id); with Manage drafts: create_draft, update_draft; with Send email: send_draft (always waits for your approval in Lockbox). After changing permissions, refresh the connector in your AI app so it sees the new tools. Deleting the key in Lockbox disconnects every app using it.`;
+Tools: list_messages (limit, mailbox), get_message (id); with Manage drafts: create_draft, update_draft; with Send email: send_draft (always waits for your approval in Lockbox). After changing permissions, disconnect/delete the ChatGPT connection and connect it again: ChatGPT saves the tool list when connecting and does not reliably refresh it in an existing chat. Repeat for other AI apps if they cache tools. Deleting the key in Lockbox disconnects every app using it.`;
 }

@@ -112,10 +112,25 @@ Lockbox has a built-in MCP server at `https://<your-domain>/api/ai/v1/mcp`. It o
 - **Manage drafts**: `create_draft`, `update_draft` save drafts in your Gmail or Outlook. Replies thread with the original, go to the sender only unless reply-all is asked for, and never quote the original.
 - **Send email**: `send_draft`. Nothing is sent until you approve that exact email on the Lockbox approval page (the agent gets the link), or in the native dialog on desktop. Any edit cancels the approval. Each approved version is sent once; if the provider's answer is unclear, Lockbox checks whether it went out before trying again.
 - Gmail and Outlook mailboxes connected before this feature need one more sign-in: Mailboxes → **Allow AI drafts**. Reading keeps working until then.
-- After changing permissions, refresh the connector in ChatGPT (or reconnect in other apps) so it sees the new tools.
+- After changing permissions, disconnect/delete the ChatGPT connection and connect it again. ChatGPT saves the tool list when the connection is created; refreshing an existing chat is not enough. Reconnect other AI apps too if they cache their tool list.
 
 - **ChatGPT:** go to Settings, then Apps & Connectors, then Create (Developer mode). Paste the URL and choose OAuth. A Lockbox page opens: paste an `lbx_` key from AI Access there and click Allow.
 - **Claude Desktop, Cursor and others:** add a remote (Streamable HTTP) server with that URL and the header `Authorization: Bearer lbx_...`.
 - To disconnect an app, delete its key in AI Access.
+
+### Diagnose the live tool list
+
+Create three temporary keys in AI Access: one read-only, one with **Manage drafts**, and one with both **Manage drafts** and **Send email**. On a computer with Node.js 20+ and a Lockbox source checkout, set the values below without pasting them into chat:
+
+```powershell
+$env:LOCKBOX_MCP_URL = "https://YOUR-DOMAIN/api/ai/v1/mcp"
+$env:LOCKBOX_READ_KEY = Read-Host "Read-only test key"
+$env:LOCKBOX_DRAFT_KEY = Read-Host "Draft-enabled test key"
+$env:LOCKBOX_SEND_KEY = Read-Host "Send-enabled test key"
+node scripts/check-mcp-tools.mjs
+Remove-Item Env:LOCKBOX_READ_KEY,Env:LOCKBOX_DRAFT_KEY,Env:LOCKBOX_SEND_KEY
+```
+
+The diagnostic runs `initialize`, `notifications/initialized`, and `tools/list`, preserving any negotiated protocol and `Mcp-Session-Id` headers. It prints only tool names and pass/fail results, never keys. Expected lists are two tools for read-only, four for drafts, and five for send. Safe permission probes use nonexistent draft ids and cannot create or send email. Delete the three temporary keys afterward.
 
 On the desktop app, the same endpoint is at `http://127.0.0.1:<port>/api/ai/v1/mcp`. It only works for apps running on that computer.

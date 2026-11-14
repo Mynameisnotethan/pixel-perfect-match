@@ -92,6 +92,13 @@
 - [x] Allow the send endpoint to carry the composer's 25 MB attachment allowance without relaxing other request limits
 - [x] Replace remaining Cypht browser-tab metadata and the Servers page heading with Lockbox/Mailboxes
 
+# MCP permission diagnosis
+
+- [x] Trace live MCP discovery, published image contents, tool registration, and per-key call authorization
+- [x] Add a secret-safe initialize/tools/list diagnostic for read-only, draft-enabled, and send-enabled keys
+- [x] Require a full ChatGPT reconnect after key-permission changes so its cached tool catalog updates
+- [ ] Record authenticated tool lists from the Hostinger endpoint (blocked: no Hostinger login or test API keys are available in this environment)
+
 # Message list interaction
 
 - [x] Open the email when any empty part of a message row is clicked, not only its text

@@ -48,7 +48,7 @@ export default function AiKeys({ onNotify = () => {} }) {
     const next = normalizePerms({ ...normalizePerms(k.perms), [id]: on, ...(id === 'drafts' && !on ? { send: false } : {}) });
     if (on && id === 'send' && !confirm(`Allow "${k.name}" to ask to send email? You'll still approve every email in Lockbox before it is sent.`)) return;
     setError('');
-    try { await store().setPerms(k.id, next); refresh(); onNotify('Key permissions saved.'); } catch (err) { setError(err.message); }
+    try { await store().setPerms(k.id, next); refresh(); onNotify('Permissions saved. Disconnect and reconnect ChatGPT to update its tools.'); } catch (err) { setError(err.message); }
   };
   const remove = async k => {
     if (!confirm(`Delete "${k.name}"? Anything using this key will stop working.`)) return;

@@ -95,7 +95,7 @@ const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', b
 const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Mailboxes', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 import MailboxDialog from './MailboxDialog.jsx';
-import AiDrafts from './AiDrafts.jsx';
+import { aiDraftsToMessages } from './ai-draft-messages.js';
 import { useAuth } from './AuthScreens.jsx';
 import { liveBridge, inboxToMessages, liveAccount, connectionInfo, downloadRemoteAttachment, fetchRemoteAttachment, forwardAttachments } from './mailbox-live.js';
 import { parseAccountView } from './mailbox-view.js';
@@ -266,6 +266,14 @@ export default function App() {
     privacyQueue.current = privacyQueue.current.then(save);
     return () => { active = false; clearTimeout(retry); };
   }, [messages, aiDefaults, labels, privacyLoaded]);
+  // Drafts an AI agent writes land in Drafts like any other draft.
+  useEffect(() => {
+    const bridge = liveBridge(); if (!LIVE || !bridge?.aiDrafts) return;
+    let stop = false;
+    const load = () => bridge.aiDrafts.list().then(list => { if (!stop) setMessages(all => aiDraftsToMessages(all, list, id => accountFor(id))); }, () => {});
+    load(); const t = setInterval(load, 30_000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
   function refreshLive() {
     const bridge = liveBridge(); if (!bridge) return;
     bridge.list().then(list => {
@@ -349,7 +357,7 @@ export default function App() {
   }
   function updateDraft(next) { setDrafts(all => all.map(item => item.id === next.id ? { ...next, saveState: 'saving' } : item)); }
   function saveNow(list) {
-    const messagesToSave = list.filter(Boolean).map(item => draftMessage(normalizeDraft(item, item.account), accountFor(item.account), 'drafts'));
+    const messagesToSave = list.filter(Boolean).map(item => draftMessage(normalizeDraft(item.aiDraft ? { ...item, aiDraft: { ...item.aiDraft, edited: true } } : item, item.account), accountFor(item.account), 'drafts'));
     if (messagesToSave.length) setMessages(all => [...messagesToSave, ...all.filter(message => !messagesToSave.some(item => item.id === message.id))]);
   }
   function closeDraft(draft) {
@@ -467,7 +475,6 @@ export default function App() {
           </div>
           {selected.length > 0 && <div className="bulk-toolbar"><span>{selected.length} selected</span><Tool icon="envelope-open" label="Mark selected as read" onClick={() => { updateMessages(selected, { read: true }); setSelected([]); }} /><Tool icon="envelope" label="Mark selected as unread" onClick={() => { updateMessages(selected, { read: false }); setSelected([]); }} /><Tool icon="flag" label="Flag selected" onClick={() => { updateMessages(selected, { flagged: true }); setSelected([]); }} /><Tool icon="archive" label="Archive selected" onClick={() => move(selected, 'archive')} /><Tool icon="inbox" label="Move selected to Inbox" onClick={() => move(selected, 'inbox')} /><Tool icon="trash" label="Delete selected" onClick={() => remove(selected)} /><button className="btn btn-sm btn-link" onClick={() => setSelected([])}>Cancel</button></div>}
           {query && <div className="search-summary">Results for “{query}”<button onClick={() => setQuery('')}>Clear search <Icon name="x" /></button></div>}
-          {view === 'drafts' && !active && <AiDrafts />}
           <div className={`mail-workspace ${active && settings.readingPane ? 'with-reading-pane' : ''}`}>
             {(!active || settings.readingPane) && <section className="mail-list" aria-label="Messages">
               <table className="message_table table"><thead><tr><th aria-label="Selection" /><th aria-label="Flag" /><th>From</th><th>Subject</th><th className="source-heading">Source</th><th className="date-heading">Date</th></tr></thead><tbody>

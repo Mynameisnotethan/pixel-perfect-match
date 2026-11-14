@@ -68,6 +68,7 @@ export function friendlyImapError(e) {
   return 'connection_failed';
 }
 
+const imapList = l => (l || []).map(a => a.name ? `${a.name} <${a.address}>` : a.address).filter(Boolean).join(', ');
 export function createImapClient({ ImapFlow, nodemailer, allowPrivate = false }) {
   const imapClient = s => new ImapFlow({ host: s.imap.host, port: s.imap.port, secure: s.imap.security === 'ssl', doSTARTTLS: s.imap.security === 'starttls' ? true : undefined, auth: { user: s.username, pass: s.password }, logger: false, socketTimeout: 30_000 });
   const transport = s => nodemailer.createTransport({ host: s.smtp.host, port: s.smtp.port, secure: s.smtp.security === 'ssl', requireTLS: s.smtp.security === 'starttls', auth: { user: s.username, pass: s.password }, connectionTimeout: 15_000 });
@@ -90,7 +91,7 @@ export function createImapClient({ ImapFlow, nodemailer, allowPrivate = false })
           if (total) for await (const m of c.fetch(`${Math.max(1, total - max + 1)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, bodyStructure: true, bodyParts: ['TEXT'] }, { partial: true })) {
             const from = m.envelope?.from?.[0];
             const text = (m.bodyParts?.get('text') || m.bodyParts?.get('TEXT') || Buffer.alloc(0)).toString('utf8').slice(0, 2000);
-            out.push({ uid: m.uid, textPart: imapTextPart(m.bodyStructure), id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false, attachments: imapAttachments(m.bodyStructure) });
+            out.push({ uid: m.uid, textPart: imapTextPart(m.bodyStructure), id: String(m.uid), from: from ? (from.name ? `${from.name} <${from.address}>` : from.address) : '', subject: m.envelope?.subject || '', to: imapList(m.envelope?.to), cc: imapList(m.envelope?.cc), date: new Date(m.internalDate || m.envelope?.date || Date.now()).toISOString(), snippet: text.replace(/<[^>]+>/g, ' ').replace(/=\r?\n/g, '').replace(/\s+/g, ' ').trim().slice(0, 300), read: m.flags?.has('\\Seen') || false, attachments: imapAttachments(m.bodyStructure) });
           }
           // Full readable text for each email (download decodes transfer encoding and charset).
           for (const item of out) {

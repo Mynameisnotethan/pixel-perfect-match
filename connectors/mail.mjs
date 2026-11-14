@@ -45,6 +45,7 @@ const graphDraftBody = d => ({
   subject: d.subject, body: { contentType: 'Text', content: d.body },
   toRecipients: graphRecipients(d.to), ccRecipients: graphRecipients(d.cc), bccRecipients: graphRecipients(d.bcc),
 });
+const graphAddr = r => { const a = r?.emailAddress || {}; return a.name && a.name !== a.address ? `${a.name} <${a.address || ''}>` : a.address || ''; };
 const addr = v => (v || '').trim();
 
 export const mail = {
@@ -54,7 +55,7 @@ export const mail = {
       const list = await api(`${GMAIL}/messages?labelIds=INBOX&maxResults=${max}`, token);
       // Small pages; a production sync should batch these and track historyId.
       const msgs = await Promise.all((list.messages || []).map(m => api(`${GMAIL}/messages/${m.id}?format=full`, token)));
-      return msgs.map(m => ({ id: m.id, from: header(m.payload.headers, 'from'), subject: header(m.payload.headers, 'subject'), date: new Date(Number(m.internalDate)).toISOString(), snippet: m.snippet, body: gmailText(m.payload) || m.snippet || '', read: !m.labelIds?.includes('UNREAD'), attachments: gmailAttachments(m.payload) }));
+      return msgs.map(m => ({ id: m.id, from: header(m.payload.headers, 'from'), subject: header(m.payload.headers, 'subject'), to: header(m.payload.headers, 'to'), cc: header(m.payload.headers, 'cc'), date: new Date(Number(m.internalDate)).toISOString(), snippet: m.snippet, body: gmailText(m.payload) || m.snippet || '', read: !m.labelIds?.includes('UNREAD'), attachments: gmailAttachments(m.payload) }));
     },
     async attachment(token, messageId, attachmentId) {
       const msg = await api(`${GMAIL}/messages/${encodeURIComponent(messageId)}?format=full`, token);
@@ -106,8 +107,8 @@ export const mail = {
   microsoft: {
     async profile(token) { const p = await api(`${GRAPH}?$select=mail,userPrincipalName`, token); return { email: p.mail || p.userPrincipalName }; },
     async inbox(token, max = 25) {
-      const r = await api(`${GRAPH}/mailFolders/inbox/messages?$top=${max}&$orderby=receivedDateTime desc&$select=id,from,subject,receivedDateTime,bodyPreview,body,isRead,hasAttachments`, token, { headers: { Prefer: 'outlook.body-content-type="text"' } });
-      return Promise.all(r.value.map(async m => ({ id: m.id, from: m.from?.emailAddress?.address || '', subject: m.subject, date: m.receivedDateTime, snippet: m.bodyPreview, body: clampText(m.body?.contentType?.toLowerCase() === 'html' ? htmlToText(m.body.content) : m.body?.content) || m.bodyPreview || '', read: m.isRead,
+      const r = await api(`${GRAPH}/mailFolders/inbox/messages?$top=${max}&$orderby=receivedDateTime desc&$select=id,from,subject,receivedDateTime,bodyPreview,body,toRecipients,ccRecipients,isRead,hasAttachments`, token, { headers: { Prefer: 'outlook.body-content-type="text"' } });
+      return Promise.all(r.value.map(async m => ({ id: m.id, from: graphAddr(m.from), to: (m.toRecipients || []).map(graphAddr).join(', '), cc: (m.ccRecipients || []).map(graphAddr).join(', '), subject: m.subject, date: m.receivedDateTime, snippet: m.bodyPreview, body: clampText(m.body?.contentType?.toLowerCase() === 'html' ? htmlToText(m.body.content) : m.body?.content) || m.bodyPreview || '', read: m.isRead,
         attachments: m.hasAttachments ? ((await api(`${GRAPH}/messages/${encodeURIComponent(m.id)}/attachments?$select=id,name,contentType,size,isInline`, token)).value || []).filter(a => !a.isInline || a.name).map(a => ({ id: a.id, name: a.name || 'attachment', type: a.contentType || 'application/octet-stream', size: a.size || 0 })) : [] })));
     },
     async attachment(token, messageId, attachmentId) {

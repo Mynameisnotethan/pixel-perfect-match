@@ -30,3 +30,11 @@ describe("received emails show their whole text", () => {
     expect(imapTextPart(tree)).toEqual({ part: "1.1", html: false });
   });
 });
+describe("received emails keep sender name and recipients", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("Outlook keeps sender name, To and Cc", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ value: [{ id: "1", from: { emailAddress: { name: "Ann Lee", address: "ann@x.com" } }, toRecipients: [{ emailAddress: { address: "me@o.com" } }], ccRecipients: [{ emailAddress: { name: "Bo", address: "bo@x.com" } }], subject: "s", receivedDateTime: "2026-11-14T00:00:00Z", body: { contentType: "text", content: "hi" }, hasAttachments: false }] }), { status: 200 }));
+    const [m] = inboxToMessages({ id: "microsoft:me@o.com" }, await mail.microsoft.inbox("tok"));
+    expect([m.sender, m.email, m.to, m.cc]).toEqual(["Ann Lee", "ann@x.com", "me@o.com", "Bo <bo@x.com>"]);
+  });
+});

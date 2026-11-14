@@ -86,7 +86,8 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
   const demo = !liveBridge()?.aiKeys;
   const refresh = () => store().list().then(setKeys).catch(e => setError(e.message));
   const [endpoint, setEndpoint] = useState('');
-  useEffect(() => { refresh(); const b = liveBridge(); if (b?.aiEndpoint) Promise.resolve(b.aiEndpoint()).then(setEndpoint).catch(() => {}); }, []);
+  const [build, setBuild] = useState('');
+  useEffect(() => { refresh(); const b = liveBridge(); if (b?.aiEndpoint) Promise.resolve(b.aiEndpoint()).then(setEndpoint).catch(() => {}); if (b?.aiVersion) Promise.resolve(b.aiVersion()).then(v => setBuild(v?.version || ''), () => setBuild('older build (no direct send)')); }, []);
   const create = async e => {
     e.preventDefault(); setError('');
     try { const k = await store().create(name); setFresh(k); setName(''); setCreating(false); refresh(); } catch (err) { setError(err.message === 'name_required' ? 'Give the key a name.' : err.message); }
@@ -102,6 +103,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
   return <div className="ai-keys">
     <div className="ai-card-head"><div><h2>API keys</h2><p className="muted-copy">Keys belong to your account only. Give each AI agent its own key so you can remove one without affecting the others.{demo && ' Demo: kept in this browser.'}</p></div>
       {!creating && <button className="btn btn-primary btn-sm" onClick={() => { setCreating(true); setFresh(null); }}><Icon name="plus-lg" /> Create API key</button>}</div>
+    {build && <p className="muted-copy ai-build">Server build: <code>{build}</code></p>}
     {creating && <form className="ai-key-form" onSubmit={create}><input className="form-control form-control-sm" autoFocus maxLength={60} placeholder="Key name, e.g. Claude agent" aria-label="Key name" value={name} onChange={e => setName(e.target.value)} /><button className="btn btn-primary btn-sm" type="submit">Create</button><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => { setCreating(false); setName(''); }}>Cancel</button></form>}
     {fresh && <div className="ai-key-fresh" role="status"><strong><Icon name="exclamation-triangle" /> Copy “{fresh.name}” now. You won't see it again.</strong><div className="ai-key-copy"><code>{fresh.key}</code><button className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(fresh.key); onNotify('API key copied.'); }}><Icon name="clipboard" /> Copy</button><button className="btn btn-sm btn-link" onClick={() => setFresh(null)}>Done</button></div></div>}
     {error && <div className="ai-key-error" role="alert">{error}</div>}

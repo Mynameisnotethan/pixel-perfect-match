@@ -12,6 +12,8 @@ export function createKeyStore({ read, write }) {
   let queue = Promise.resolve();
   const mutate = fn => (queue = queue.then(async () => { const db = await read(); const out = await fn(db); await write(db); return out; }));
   return {
+    /** Current permissions of one key, or null when it was deleted. Used to re-check queued sends. */
+    permsOf: async (user, id) => { const k = ((await read())[user] || []).find(x => x.id === id); return k ? normalizePerms(k.perms) : null; },
     list: async user => ((await read())[user] || []).map(view),
     create: (user, rawName) => {
       const name = String(rawName || '').trim().slice(0, 60);

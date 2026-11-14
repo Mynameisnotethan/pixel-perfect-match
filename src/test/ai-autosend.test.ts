@@ -4,9 +4,9 @@ import { normalizePerms, canAutoSend } from "../../connectors/ai-perms.mjs";
 import { createDraftService } from "../../connectors/ai-drafts.mjs";
 
 const BOX = "microsoft:me@o.com";
-function service(sent = []) {
+function service(sent = [], permsForKey = async () => trusted.perms) {
   let db = {};
-  return createDraftService({ read: async () => structuredClone(db), write: async x => { db = structuredClone(x); }, feedFor: async () => [],
+  return createDraftService({ permsForKey, read: async () => structuredClone(db), write: async x => { db = structuredClone(x); }, feedFor: async () => [],
     withMailbox: async (_o, id, fn) => fn({ createDraft: async () => ({ providerDraftId: "p1" }), updateDraft: async () => {}, sendDraft: async pid => { sent.push(pid); return { messageId: "m1" }; }, draftExists: async () => true }, { id, email: "me@o.com", provider: "microsoft", caps: { drafts: true, send: true } }) });
 }
 const send = { [BOX]: { read: true, drafts: true, send: true } };
@@ -47,7 +47,7 @@ describe("send without per-email approval", () => {
     const d = await svc.create(trusted, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
     const at = new Date(Date.now() + 3600_000).toISOString();
     const r = await svc.schedule(trusted, { draft_id: d.draft_id, version: d.version, send_at: at });
-    expect(r.schedule_status).toBe("scheduled"); expect(r.approval_url).toBeUndefined();
+    expect(r.status).toBe("queued"); expect(r.schedule_status).toBe("queued"); expect(r.direct_send).toBe(true); expect(r.approval_url).toBeUndefined();
     await svc.runDue(Date.now()); expect(sent).toEqual([]);
     await svc.runDue(Date.parse(at) + 1000); expect(sent).toEqual(["p1"]);
   });
@@ -57,5 +57,42 @@ describe("send without per-email approval", () => {
     const at = new Date(Date.now() + 120_000).toISOString();
     expect((await svc.schedule(normal, { draft_id: d.draft_id, version: d.version, send_at: at })).schedule_status).toBe("awaiting_approval");
     await svc.runDue(Date.parse(at) + 1000); expect(sent).toEqual([]);
+  });
+});
+
+import { aiDraftsToMessages } from "../cypht/ai-draft-messages.js";
+describe("queued sends stay under the owner's control", () => {
+  const at = () => new Date(Date.now() + 3600_000).toISOString();
+  it("a revoked key cannot release a queued email", async () => {
+    const sent = []; let perms = trusted.perms; const svc = service(sent, async () => perms);
+    const d = await svc.create(trusted, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
+    const when = at(); await svc.schedule(trusted, { draft_id: d.draft_id, version: d.version, send_at: when });
+    perms = { mailboxes: send }; // owner turned off no-approval sending
+    await svc.runDue(Date.parse(when) + 1000);
+    expect(sent).toEqual([]);
+    expect((await svc.ownerList("u"))[0].schedule_status).toBe("needs_approval");
+  });
+  it("a deleted key cannot release a queued email", async () => {
+    const sent = []; const svc = service(sent, async () => null);
+    const d = await svc.create(trusted, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
+    const when = at(); await svc.schedule(trusted, { draft_id: d.draft_id, version: d.version, send_at: when });
+    await svc.runDue(Date.parse(when) + 1000); expect(sent).toEqual([]);
+  });
+  it("owner cancel stops the send and the email returns to Drafts", async () => {
+    const sent = []; const svc = service(sent);
+    const d = await svc.create(trusted, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
+    const when = at(); await svc.schedule(trusted, { draft_id: d.draft_id, version: d.version, send_at: when });
+    let msgs = aiDraftsToMessages([], await svc.ownerList("u"));
+    expect([msgs[0].folder, msgs[0].aiStatus, msgs[0].to]).toEqual(["scheduled", "queued", "me@o.com"]);
+    await svc.ownerCancel("u", d.draft_id);
+    await svc.runDue(Date.parse(when) + 1000); expect(sent).toEqual([]);
+    msgs = aiDraftsToMessages(msgs, await svc.ownerList("u"));
+    expect(msgs[0].folder).toBe("drafts");
+  });
+  it("an old approval request is not released by turning the setting on", async () => {
+    const sent = []; const svc = service(sent);
+    const d = await svc.create(normal, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
+    const when = at(); await svc.schedule(normal, { draft_id: d.draft_id, version: d.version, send_at: when });
+    await svc.runDue(Date.parse(when) + 1000); expect(sent).toEqual([]);
   });
 });

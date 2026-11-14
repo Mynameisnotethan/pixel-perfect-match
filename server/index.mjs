@@ -1,3 +1,4 @@
+import { LOCKBOX_VERSION } from '../connectors/ai-mcp.mjs';
 // Lockbox Docker backend: browser sign-in, first-run setup, web OAuth callbacks,
 // encrypted token storage, sync + send.
 // Client secrets, passwords and mailbox tokens stay on this server; the browser only sees
@@ -129,7 +130,7 @@ const feedForOwner = async (owner, { mailbox } = {}) => buildFeed({
 });
 const draftFile = encryptedFile({ file: path.join(DATA_DIR, 'ai-drafts.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) });
 const aiDrafts = createDraftService({
-  read: draftFile.read, write: draftFile.write, feedFor: feedForOwner,
+  read: draftFile.read, write: draftFile.write, feedFor: feedForOwner, permsForKey: (owner, id) => aiKeys.permsOf(owner, id),
   withMailbox: (owner, id, fn) => withToken(owner, id, (t, b) => fn(b.provider === 'imap' ? null : draftOps(b.provider, t), { ...b, caps: aiCapabilities(b.provider, b.tokens?.scope) })),
 });
 
@@ -262,10 +263,13 @@ http.createServer(async (req, res) => {
       try { return html(200, approvedPage(await aiDrafts.approve(user, m[1], String(form.hash || '')))); }
       catch (e) { if (e.status === 409) return html(409, approvePage(await aiDrafts.ownerView(user, m[1]), session.csrf, e.message)); throw e; }
     }
+    if (url.pathname === '/api/ai/version' && req.method === 'GET') { if (!user) return send(res, 401, { error: 'sign_in_required' }); return send(res, 200, { version: LOCKBOX_VERSION }); }
     if (url.pathname === '/api/ai/drafts' && req.method === 'GET') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       return send(res, 200, await aiDrafts.ownerList(user));
     }
+    { const m = /^\/api\/ai\/drafts\/([A-Za-z0-9_-]{1,100})\/cancel$/.exec(url.pathname);
+      if (m && req.method === 'POST') { if (!user) return send(res, 401, { error: 'sign_in_required' }); return send(res, 200, await aiDrafts.ownerCancel(user, m[1])); } }
     if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const keyId = decodeURIComponent(url.pathname.slice('/api/ai/keys/'.length) || '');

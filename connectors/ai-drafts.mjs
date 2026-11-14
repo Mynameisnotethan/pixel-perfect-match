@@ -43,7 +43,8 @@ function scheduleOf(d) {
   if (!d.sendAt) return { send_at: null, schedule_status: null };
   const sent = d.send?.status === 'sent' && d.send.hash === d.hash;
   const approved = !!d.approval && d.approval.hash === d.hash;
-  return { send_at: d.sendAt, schedule_status: sent ? 'sent' : d.send?.status === 'failed' ? 'failed' : approved ? 'scheduled' : 'awaiting_approval' };
+  const st = d.send?.hash === d.hash ? d.send?.status : null;
+  return { send_at: d.sendAt, schedule_status: sent ? 'sent' : st === 'failed' ? 'failed' : st === 'sending' || st === 'unknown' ? 'sending' : d.scheduleBlocked && !approved ? 'needs_approval' : approved ? 'queued' : 'awaiting_approval' };
 }
 const statusOf = d => d.send?.status === 'sent' && d.send.hash === d.hash ? 'sent' : d.send?.status === 'unknown' ? 'send_status_unknown' : d.send?.status === 'sending' ? 'sending' : 'draft';
 /** What the agent is shown: never reveals parts of the original email the owner hid. */
@@ -59,6 +60,7 @@ function aiPreview(d) {
     ...storageOf(d), ...scheduleOf(d),
   };
 }
+const withDirect = (who, p) => ({ ...p, direct_send: canAutoSend(who.perms, p.mailbox) });
 /** What the owner is shown on the approval page: the real, complete content. */
 export const ownerPreview = d => ({ id: d.id, version: d.version, hash: d.hash, ...effective(d), approved: !!d.approval && d.approval.hash === d.hash, sent: d.send?.status === 'sent' && d.send.hash === d.hash, status: d.send?.status || 'draft', createdAt: d.createdAt, updatedAt: d.updatedAt, ...storageOf(d), ...scheduleOf(d) });
 
@@ -92,7 +94,7 @@ const ambiguous = e => !(e.status === 409 || (e.providerStatus >= 400 && e.provi
  * feedFor(owner, opts) returns the owner's reviewed, redacted feed (replies may only target these).
  * confirm(ownerPreview) optional trusted native confirmation (desktop). Resolves true when the owner approves.
  */
-export function createDraftService({ read, write, withMailbox, feedFor, confirm = null }) {
+export function createDraftService({ read, write, withMailbox, feedFor, confirm = null, permsForKey = null }) {
   let queue = Promise.resolve();
   const mutate = fn => { const run = queue.then(async () => { const db = { drafts: {}, ...((await read()) || {}) }; const out = await fn(db); await write(db); return out; }); queue = run.catch(() => {}); return run; };
   const own = (db, who, id) => { const d = typeof id === 'string' && db.drafts[id]; if (!d || d.owner !== who.user || (who.perms && !can(who.perms, d.mailbox, 'drafts'))) throw err('Draft not found.', 404, 'not_found'); return d; };
@@ -259,7 +261,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       .filter(d => d.owner === who.user && (!mailbox || d.mailbox === mailbox) && (!who.perms || can(who.perms, d.mailbox, 'drafts')))
       .sort((x, y) => String(y.updatedAt || y.createdAt).localeCompare(String(x.updatedAt || x.createdAt))).slice(0, n).map(aiPreview) }));
   }
-  const get = (who, a = {}) => mutate(db => aiPreview(own(db, who, a.draft_id)));
+  const get = (who, a = {}) => mutate(db => withDirect(who, aiPreview(own(db, who, a.draft_id))));
 
   /** Asks the owner to review the exact current version. Never sends, even when already approved. */
   async function requestApproval(who, a = {}, { approvalUrl = id => `/api/ai/approve/${id}` } = {}) {
@@ -292,7 +294,8 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     });
     if (auto) {
       await autoApprove(who, a.draft_id, hash);
-      return { ...(await get(who, { draft_id: a.draft_id })), message: `Scheduled for ${sendAt}. Lockbox sends this exact email once at that time.` };
+      const g = await get(who, { draft_id: a.draft_id });
+      return { ...g, status: 'queued', message: `Queued for ${sendAt}. Lockbox sends this exact email once at that time. It is listed in Lockbox → Scheduled.` };
     }
     return requestApproval(who, { draft_id: a.draft_id }, opts);
   }
@@ -311,16 +314,29 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
   async function runDue(now = Date.now()) {
     if (running) return []; running = true;
     try {
-      const due = await mutate(db => Object.values(db.drafts).filter(d => d.sendAt && Date.parse(d.sendAt) <= now && d.approval?.hash === d.hash && (!d.send || d.send.hash !== d.hash || ['sending', 'unknown'].includes(d.send.status))).map(d => ({ id: d.id, owner: d.owner })));
+      const due = await mutate(db => Object.values(db.drafts).filter(d => d.sendAt && Date.parse(d.sendAt) <= now && d.approval?.hash === d.hash && (!d.send || d.send.hash !== d.hash || ['sending', 'unknown'].includes(d.send.status))).map(d => ({ id: d.id, owner: d.owner, byKey: d.approval.by === 'key' ? d.approval.keyId : undefined, mailbox: d.mailbox })));
       const out = [];
-      for (const { id, owner } of due) {
+      for (const { id, owner, byKey, mailbox } of due) {
+        // Queued without the owner's per-email approval: the key must still be trusted for this mailbox now.
+        if (byKey !== undefined) {
+          let ok = false; try { ok = !!permsForKey && !!byKey && canAutoSend(await permsForKey(owner, byKey), mailbox); } catch { ok = false; }
+          if (!ok) { await mutate(db => { const x = db.drafts[id]; if (x && x.approval?.by === 'key' && !(x.send?.status === 'sent' && x.send.hash === x.hash)) { x.approval = null; x.scheduleBlocked = true; } }); continue; }
+        }
         try { out.push(await send({ user: owner, perms: null }, { draft_id: id }, { scheduled: true })); }
         catch (e) { console.error(`[lockbox] scheduled draft ${id} failed: ${e.code || e.status || 'error'}`); }
       }
       return out;
     } finally { running = false; }
   }
+  /** Owner cancels a scheduled send from a trusted Lockbox screen; the email goes back to being a draft. */
+  const ownerCancel = (owner, id) => mutate(db => {
+    const d = db.drafts[id]; if (!d || d.owner !== owner) throw err('Draft not found.', 404, 'not_found');
+    if (!d.sendAt) return ownerPreview(d);
+    if (statusOf(d) !== 'draft') throw err('Too late: this email was already sent or is being sent.', 409, 'already_sent');
+    delete d.sendAt; delete d.scheduleBlocked; d.version += 1; d.hash = contentHash(d); d.approval = null; d.send = null; d.updatedAt = new Date().toISOString();
+    return ownerPreview(d);
+  });
   const ownerList = owner => mutate(db => Object.values(db.drafts).filter(d => d.owner === owner).sort((x, y) => String(y.updatedAt || y.createdAt).localeCompare(String(x.updatedAt || x.createdAt))).map(ownerPreview));
 
-  return { create, update, send, approve, ownerView, list, get, requestApproval, schedule, cancelSchedule, runDue, ownerList };
+  return { create, update, send, approve, ownerView, list, get, requestApproval, schedule, cancelSchedule, runDue, ownerList, ownerCancel };
 }

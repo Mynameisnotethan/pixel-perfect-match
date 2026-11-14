@@ -1,4 +1,6 @@
 import { can } from './ai-perms.mjs';
+/** Build marker shown in MCP initialize, so the owner can tell which code a server runs. Bump when MCP behaviour changes. */
+export const LOCKBOX_VERSION = '2026.11.14-direct-send';
 // Native MCP (Model Context Protocol) endpoint for AI agents: POST /api/ai/v1/mcp.
 // Stateless Streamable HTTP, JSON responses only. Two read-only tools over the same redacted feed
 // as the REST API, so redaction and "reviewed only" rules are identical.
@@ -83,7 +85,7 @@ export const APPROVAL_TOOLS = [
   },
   {
     name: 'schedule_send', title: 'Schedule draft',
-    description: 'Schedule a draft to be sent at send_at (ISO 8601 with a time zone, e.g. 2026-11-20T09:00:00-05:00). Pass version. If the owner allowed this key to send without per-email approval for this mailbox, that exact version is queued immediately; otherwise the owner approves it via the returned approval_url. Lockbox sends it once at that time. Rescheduling or editing needs a new approval. Use get_draft for schedule_status.',
+    description: 'Schedule a draft to be sent at send_at (ISO 8601 with a time zone, e.g. 2026-11-20T09:00:00-05:00). Pass version. If the owner allowed this key to send without per-email approval for this mailbox (direct_send true in get_draft), that exact version is queued immediately and status queued is returned, with no approval_url; otherwise the owner approves it via the returned approval_url. Lockbox sends it once at that time. Rescheduling or editing needs a new approval. Use get_draft for schedule_status.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id', 'send_at'], properties: { ...DRAFT_REF, send_at: { type: 'string', maxLength: 40 } } },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   },
@@ -121,7 +123,7 @@ export async function handleMcpMessage(msg, { user, feedFor, perms = { read: tru
     case 'initialize': return ok({
       protocolVersion: SUPPORTED.includes(p.protocolVersion) ? p.protocolVersion : MCP_PROTOCOL,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: 'lockbox', title: 'Lockbox', version: '1.0.0' },
+      serverInfo: { name: 'lockbox', title: 'Lockbox', version: LOCKBOX_VERSION },
       instructions: INSTRUCTIONS,
     });
     case 'ping': return ok({});

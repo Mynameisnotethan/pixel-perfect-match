@@ -1,3 +1,4 @@
+import { LOCKBOX_VERSION } from './connectors/ai-mcp.mjs';
 // Lockbox desktop shell (Electron). OAuth runs in the native process:
 // system browser + PKCE + loopback callback; tokens live in the OS credential vault (keytar).
 import { app, BrowserWindow, ipcMain, shell, protocol, net, session, dialog } from 'electron';
@@ -151,10 +152,12 @@ const confirmSend = async (d, { approveOnly = false } = {}) => {
   return r.response === 1;
 };
 const aiDrafts = createDraftService({
-  read: draftVault.read, write: draftVault.write, feedFor: feedLocal, confirm: confirmSend,
+  read: draftVault.read, write: draftVault.write, feedFor: feedLocal, confirm: confirmSend, permsForKey: (owner, id) => aiKeys.permsOf(owner, id),
   withMailbox: async (_owner, id, fn) => { const scope = (await tokensFor(id))?.scope; return withToken(id, (t, b) => fn(b.provider === 'imap' ? null : bind(b.provider, t), { ...b, caps: aiCapabilities(b.provider, scope) })); },
 });
 on('aiDrafts:list', () => aiDrafts.ownerList(LOCAL_USER));
+on('ai:version', () => ({ version: LOCKBOX_VERSION }));
+on('aiDrafts:cancel', id => aiDrafts.ownerCancel(LOCAL_USER, String(id)));
 // Scheduled sends run only while the desktop app is open; missed ones go out the next time it starts.
 setInterval(() => aiDrafts.runDue().catch(e => console.error(`[lockbox] scheduled sends: ${e.message}`)), 30_000);
 const aiRoutes = createAiRoutes({

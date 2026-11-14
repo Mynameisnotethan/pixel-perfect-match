@@ -5,6 +5,7 @@
 // Shared by the Docker mail server and the desktop app.
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeOutgoing } from './outgoing.mjs';
+import { can } from './ai-perms.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 const err = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -58,9 +59,10 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
   let queue = Promise.resolve();
   const mutate = fn => { const run = queue.then(async () => { const db = { drafts: {}, ...((await read()) || {}) }; const out = await fn(db); await write(db); return out; }); queue = run.catch(() => {}); return run; };
   const own = (db, who, id) => { const d = typeof id === 'string' && db.drafts[id]; if (!d || d.owner !== who.user) throw err('Draft not found.', 404); return d; };
+  const allowBox = (who, id, need) => { if (who.perms && !can(who.perms, id, need)) throw err(`This API key is not allowed to ${need === 'send' ? 'send from' : 'draft in'} ${id}. The owner can change this in Lockbox → AI Access → Edit.`, 403); };
   const needCaps = (box, need) => {
     if (!['google', 'microsoft'].includes(box.provider)) throw err('AI drafts work with Gmail and Outlook mailboxes only.');
-    if (!box.caps?.[need]) throw err(`This mailbox has not allowed Lockbox to ${need === 'send' ? 'send' : 'save drafts'} for AI yet. In Lockbox, open Mailboxes and click "Allow AI drafts" on ${box.email}, then try again. Reading still works meanwhile.`, 409);
+    if (!box.caps?.[need]) throw err(`This mailbox has not allowed Lockbox to ${need === 'send' ? 'send' : 'save drafts'} for AI yet. The owner can sign in again from Lockbox → AI Access → Edit for ${box.email}, then try again. Reading still works meanwhile.`, 409);
   };
   const validate = d => { const e = effective(d); normalizeOutgoing({ to: e.to, cc: e.cc, bcc: e.bcc, subject: e.subject, body: e.body }); };
 
@@ -72,7 +74,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     if (a.reply_to_message_id !== undefined) {
       const fid = pickText(a.reply_to_message_id, 'reply_to_message_id', 400);
       const orig = (await feedFor(who.user, {})).find(m => m.id === fid);
-      if (!orig) throw err('You can only reply to an email the owner has reviewed.', 404);
+      if (!orig || (who.perms && !can(who.perms, orig.mailbox, 'read'))) throw err('You can only reply to an email the owner has reviewed.', 404);
       if (mailbox && mailbox !== orig.mailbox) throw err('A reply is sent from the mailbox that received the email.');
       mailbox = orig.mailbox; d.reply = { feedId: fid };
       d._orig = orig;
@@ -80,7 +82,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     if (!mailbox) throw err('mailbox is required (for example google:me@gmail.com). list_messages shows mailbox ids.');
     d.mailbox = mailbox;
     return withMailbox(who.user, mailbox, async (api, box) => {
-      needCaps(box, 'drafts'); d.from = box.email;
+      allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); d.from = box.email;
       if (d.reply) {
         const orig = d._orig; delete d._orig;
         const ctx = await api.replyContext(String(orig.id).slice(box.id.length + 1));
@@ -124,11 +126,11 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     const hash = contentHash({ ...next, mailbox: mailbox || next.mailbox });
     if (mailbox && mailbox !== current.mailbox) {
       // Moving to another of the owner's mailboxes: create there first, then remove the old draft.
-      const made = await withMailbox(who.user, mailbox, async (api, box) => { needCaps(box, 'drafts'); const n = { ...next, mailbox, from: box.email }; return { ...(await api.createDraft(box.email, n)), from: box.email }; });
+      const made = await withMailbox(who.user, mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); const n = { ...next, mailbox, from: box.email }; return { ...(await api.createDraft(box.email, n)), from: box.email }; });
       await withMailbox(who.user, current.mailbox, api => api.deleteDraft(current.providerDraftId)).catch(() => {});
       Object.assign(next, { mailbox, from: made.from, providerDraftId: made.providerDraftId });
     } else if (hash !== current.hash) {
-      await withMailbox(who.user, current.mailbox, async (api, box) => { needCaps(box, 'drafts'); await api.updateDraft(box.email, current.providerDraftId, next); });
+      await withMailbox(who.user, current.mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); await api.updateDraft(box.email, current.providerDraftId, next); });
     }
     return mutate(db => {
       const d = own(db, who, a.draft_id);
@@ -165,7 +167,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     if (claim.stop === 'approval_required') return { ...aiPreview(claim.d), status: 'approval_required', approval_url: approvalUrl(claim.d.id) };
     if (claim.stop) return { ...aiPreview(claim.d), status: claim.stop === 'sent' ? 'sent' : claim.stop === 'sending' ? 'sending' : 'send_status_unknown', provider_message_id: claim.d.send?.messageId || null, message: 'Another request is already sending this draft. It was not sent twice.' };
     try {
-      const r = await withMailbox(who.user, claim.d.mailbox, async (api, box) => { needCaps(box, 'send'); return api.sendDraft(claim.d.providerDraftId); });
+      const r = await withMailbox(who.user, claim.d.mailbox, async (api, box) => { allowBox(who, box.id, 'send'); needCaps(box, 'send'); return api.sendDraft(claim.d.providerDraftId); });
       const done = await mutate(db => { const x = own(db, who, a.draft_id); x.send = { ...x.send, status: 'sent', messageId: r?.messageId || null, at: new Date().toISOString() }; return structuredClone(x); });
       return { ...aiPreview(done), status: 'sent', provider_message_id: done.send.messageId };
     } catch (e) {

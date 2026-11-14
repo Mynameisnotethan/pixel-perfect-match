@@ -277,3 +277,13 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 /* One scroll bar style everywhere */
 *{scrollbar-width:thin!important;scrollbar-color:#80b6b6 transparent!important}
 *::-webkit-scrollbar{width:8px!important;height:8px!important}*::-webkit-scrollbar-track{background:transparent!important}*::-webkit-scrollbar-thumb{background:#80b6b6!important;border-radius:8px!important}*::-webkit-scrollbar-thumb:hover{background:teal!important}
+
+/* AI key permission editor */
+.modal-backdrop-lite { position: fixed; inset: 0; z-index: 1050; display: flex; align-items: center; justify-content: center; padding: 1rem; background: color-mix(in srgb, var(--bs-body-color, #000) 35%, transparent); }
+.key-editor { width: min(560px, 100%); max-height: 90vh; overflow: auto; background: var(--bs-body-bg, #fff); border-radius: 12px; padding: 1.25rem; box-shadow: 0 12px 40px rgb(0 0 0 / .2); }
+.key-editor h2 { font-size: 1.15rem; margin: 0 0 .35rem; }
+.key-editor-all { margin: .75rem 0; }
+.key-editor-box { border: 1px solid var(--bs-border-color, #ddd); border-radius: 8px; padding: .6rem .75rem; margin-bottom: .5rem; }
+.key-editor-box > div { margin-top: .35rem; }
+.key-editor-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.ai-key-summary { font-size: .85rem; margin-right: .35rem; }

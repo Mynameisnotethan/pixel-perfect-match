@@ -1,3 +1,4 @@
+import { can } from './ai-perms.mjs';
 // Native MCP (Model Context Protocol) endpoint for AI agents: POST /api/ai/v1/mcp.
 // Stateless Streamable HTTP, JSON responses only. Two read-only tools over the same redacted feed
 // as the REST API, so redaction and "reviewed only" rules are identical.
@@ -210,7 +211,7 @@ export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, 
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return true; }
       const batch = Array.isArray(body) ? body.slice(0, 20) : [body];
-      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, feedFor, drafts, base })))).filter(Boolean);
+      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, feedFor: async (u, o) => (await feedFor(u, o)).filter(x => can(caller.perms, x.mailbox, 'read')), drafts, base })))).filter(Boolean);
       if (!out.length) { res.writeHead(202, head).end(); return true; }
       json(res, 200, Array.isArray(body) ? out : out[0]); return true;
     }

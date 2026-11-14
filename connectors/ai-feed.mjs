@@ -1,3 +1,4 @@
+import { can } from './ai-perms.mjs';
 import { aiOpenApi } from './ai-openapi.mjs';
 import { createMcpRoutes } from './ai-mcp.mjs';
 // The AI agent feed: an agent sends `Authorization: Bearer lbx_...` and gets the same redacted view as
@@ -58,7 +59,7 @@ export function createAiRoutes({ verifyKey, inspectKey = null, feedFor, limit = 
     if (caller.perms?.read === false) { json(res, 403, { error: 'read_not_allowed' }); return true; }
     const m = url.pathname.match(/^\/api\/ai\/v1\/messages(?:\/(.+))?$/);
     if (!m) { json(res, 404, { error: 'not_found' }); return true; }
-    const feed = await feedFor(user, { mailbox: url.searchParams.get('mailbox') || undefined });
+    const feed = (await feedFor(user, { mailbox: url.searchParams.get('mailbox') || undefined })).filter(x => can(caller.perms, x.mailbox, 'read'));
     if (m[1]) { const one = feed.find(x => x.id === decodeURIComponent(m[1])); json(res, one ? 200 : 404, one || { error: 'not_found' }); return true; }
     const n = Math.min(Math.max(Number(url.searchParams.get('limit')) || 25, 1), 100);
     json(res, 200, { messages: feed.slice(0, n) });

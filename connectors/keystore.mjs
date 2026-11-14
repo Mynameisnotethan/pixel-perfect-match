@@ -4,8 +4,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 /** Key permissions. Keys made before permissions existed are read-only. */
-export const READ_ONLY = Object.freeze({ read: true, drafts: false, send: false });
-export const normalizePerms = p => ({ read: p?.read !== false, drafts: p?.drafts === true, send: p?.send === true && p?.drafts === true }); // sending only ever happens from a draft
+import { READ_ONLY, normalizePerms } from './ai-perms.mjs';
+export { READ_ONLY, normalizePerms };
 const view = ({ hash, ...k }) => ({ ...k, perms: normalizePerms(k.perms) });
 
 export function createKeyStore({ read, write }) {

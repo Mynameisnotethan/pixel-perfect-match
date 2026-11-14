@@ -84,7 +84,7 @@ describe("AI drafts", () => {
   });
   it("asks older connections to allow drafts", async () => {
     const { svc, who } = setup();
-    await expect(svc.create(who, { mailbox: "google:old@x.com", to: "a@b.com", body: "x" })).rejects.toThrow(/Allow AI drafts/);
+    await expect(svc.create(who, { mailbox: "google:old@x.com", to: "a@b.com", body: "x" })).rejects.toThrow(/sign in again/);
   });
   it("needs owner approval of the exact version, and edits cancel it", async () => {
     const { svc, p, who } = setup();
@@ -162,7 +162,7 @@ describe("Key permissions over MCP", () => {
   it("existing keys stay read-only; draft-only keys cannot send", async () => {
     const s = await server();
     const k = await s.keys.create("owner", "agent");
-    expect(k.perms).toEqual({ read: true, drafts: false, send: false });
+    expect(k.perms).toMatchObject({ read: true, drafts: false, send: false });
     expect(await s.tools(k.key)).toEqual(["list_messages", "get_message"]);
     expect((await s.call(k.key, "list_messages")).structuredContent.messages).toHaveLength(1);
     expect((await s.call(k.key, "create_draft", { mailbox: "google:me@x.com", to: "a@b.com", body: "x" })).isError).toBe(true);
@@ -182,7 +182,7 @@ describe("Key permissions over MCP", () => {
   it("send permission needs drafts", async () => {
     const s = await server();
     const k = await s.keys.create("owner", "agent");
-    expect((await s.keys.setPerms("owner", k.id, { send: true })).perms).toEqual({ read: true, drafts: false, send: false });
+    expect((await s.keys.setPerms("owner", k.id, { send: true })).perms).toMatchObject({ read: true, drafts: false, send: false });
     s.close();
   });
 });

@@ -83,7 +83,7 @@ export const APPROVAL_TOOLS = [
   },
   {
     name: 'schedule_send', title: 'Schedule draft',
-    description: 'Schedule a draft to be sent at send_at (ISO 8601 with a time zone, e.g. 2026-11-20T09:00:00-05:00). The owner must approve this exact version and time via the returned approval_url; Lockbox then sends it once at that time. Rescheduling needs a new approval. Use get_draft for schedule_status.',
+    description: 'Schedule a draft to be sent at send_at (ISO 8601 with a time zone, e.g. 2026-11-20T09:00:00-05:00). Pass version. If the owner allowed this key to send without per-email approval for this mailbox, that exact version is queued immediately; otherwise the owner approves it via the returned approval_url. Lockbox sends it once at that time. Rescheduling or editing needs a new approval. Use get_draft for schedule_status.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id', 'send_at'], properties: { ...DRAFT_REF, send_at: { type: 'string', maxLength: 40 } } },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   },
@@ -96,7 +96,7 @@ export const APPROVAL_TOOLS = [
 ];
 export const SEND_TOOL = {
   name: 'send_draft', title: 'Send approved draft',
-  description: 'Send a draft once the owner has approved this exact version in Lockbox. If not approved yet, returns status approval_required and an approval_url for the owner; nothing is sent. Safe to call again: an approved version is sent at most once.',
+  description: 'Send the exact draft version passed in version. If the owner allowed this key to send without per-email approval for this mailbox, it is sent now; otherwise the owner must approve this exact version in Lockbox. If not approved yet, returns status approval_required and an approval_url for the owner; nothing is sent. Safe to call again: an approved version is sent at most once.',
   inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: {
     draft_id: { type: 'string', maxLength: 100 }, version: { type: 'integer', minimum: 1, description: 'The version shown to the owner. Send fails if the draft changed.' },
   } },
@@ -108,7 +108,7 @@ export const toolsFor = (perms = {}, drafts = null) => [
   ...(drafts && perms.drafts ? DRAFT_TOOLS : []),
   ...(drafts && perms.send ? [SEND_TOOL, ...APPROVAL_TOOLS] : []),
 ];
-const INSTRUCTIONS = 'Access to the owner\'s Lockbox mailbox, limited by what their API key allows. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. Some keys may also create and edit drafts; sending always needs the owner to approve the exact email in Lockbox. Never claim an email was sent unless send_draft returned status sent.';
+const INSTRUCTIONS = 'Access to the owner\'s Lockbox mailbox, limited by what their API key allows. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. Some keys may also create and edit drafts; sending needs the owner to approve the exact email in Lockbox unless they allowed this key to send without per-email approval for that mailbox. Creating or editing a draft never sends it. Never claim an email was sent unless send_draft returned status sent.';
 
 /** Pure JSON-RPC handling for one MCP message. Returns a response object, or null for notifications. */
 export async function handleMcpMessage(msg, { user, feedFor, perms = { read: true }, keyId = null, drafts = null, base = '' }) {

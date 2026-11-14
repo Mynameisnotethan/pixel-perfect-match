@@ -5,8 +5,8 @@ import { createDraftService } from "../../connectors/ai-drafts.mjs";
 
 describe("per-mailbox AI key permissions", () => {
   it("migrates old flags to all mailboxes", () => {
-    expect(normalizePerms({ read: true, drafts: true, send: false })).toEqual({ mailboxes: "all", read: true, drafts: true, send: false });
-    expect(normalizePerms(undefined)).toEqual({ mailboxes: "all", read: true, drafts: false, send: false });
+    expect(normalizePerms({ read: true, drafts: true, send: false })).toEqual({ mailboxes: "all", read: true, drafts: true, send: false, autoSend: [] });
+    expect(normalizePerms(undefined)).toEqual({ mailboxes: "all", read: true, drafts: false, send: false, autoSend: [] });
   });
   it("limits access to listed mailboxes", () => {
     const p = { mailboxes: { "google:a@x.com": { read: true, drafts: true, send: true } } };

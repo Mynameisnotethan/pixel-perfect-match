@@ -5,7 +5,7 @@
 // Shared by the Docker mail server and the desktop app.
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeOutgoing } from './outgoing.mjs';
-import { can } from './ai-perms.mjs';
+import { can, canAutoSend } from './ai-perms.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 const err = (message, status = 400, code = undefined) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
@@ -200,6 +200,12 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       d = await mutate(db => { const x = own(db, who, a.draft_id); x.send = stillThere ? null : { ...x.send, status: 'sent', at: new Date().toISOString() }; return structuredClone(x); });
     }
     if (d.send?.status === 'sent' && d.send.hash === d.hash) return { ...aiPreview(d), status: 'sent', provider_message_id: d.send.messageId || null, message: 'Already sent. It was not sent again.' };
+    if ((!d.approval || d.approval.hash !== d.hash) && canAutoSend(who.perms, d.mailbox)) {
+      // Owner pre-authorised this key for this mailbox: the exact version named in the request is approved.
+      if (a.version === undefined) throw err('Pass the version you checked (from create_draft, update_draft or get_draft) so Lockbox sends exactly that email.', 400, 'version_required');
+      await autoApprove(who, d.id, d.hash);
+      d = await mutate(db => structuredClone(own(db, who, a.draft_id)));
+    }
     if (!d.approval || d.approval.hash !== d.hash) {
       let approved = false;
       if (confirm) { try { approved = await confirm(ownerPreview(d)); } catch { approved = false; } }
@@ -236,6 +242,14 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     if (d.send?.status === 'sent') throw err('Already sent.', 409);
     d.approval = { hash, at: new Date().toISOString() }; return ownerPreview(d);
   });
+  /** Approval given by the owner's "send without per-email approval" setting, re-checked against the key now. */
+  const autoApprove = (who, id, hash) => mutate(db => {
+    const d = own(db, who, id);
+    if (!canAutoSend(who.perms, d.mailbox)) throw err('This API key needs the owner\'s approval for each email from this mailbox.', 403, 'key_permission_denied');
+    if (d.hash !== hash) throw err(`The draft is now version ${d.version}. Check the preview and send that version.`, 409, 'version_changed');
+    if (d.send?.status === 'sent') throw err('Already sent.', 409, 'already_sent');
+    d.approval = { hash, at: new Date().toISOString(), by: 'key', keyId: who.keyId || null };
+  });
   const ownerView = (owner, id) => mutate(db => { const d = db.drafts[id]; if (!d || d.owner !== owner) return null; return ownerPreview(d); });
 
   async function list(who, a = {}) {
@@ -265,15 +279,21 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
   /** Sets or replaces the send time. The time is part of the approved content, so this always needs a new approval. */
   async function schedule(who, a = {}, opts = {}) {
     const sendAt = parseSendAt(a.send_at);
-    await mutate(db => {
+    const auto = await mutate(db => canAutoSend(who.perms, own(db, who, a.draft_id).mailbox));
+    if (auto && a.version === undefined) throw err('Pass the version you checked (from create_draft, update_draft or get_draft) so Lockbox schedules exactly that email.', 400, 'version_required');
+    const hash = await mutate(db => {
       const d = own(db, who, a.draft_id);
       if (who.perms && !can(who.perms, d.mailbox, 'send')) throw err(`This API key is not allowed to send from ${d.mailbox}.`, 403, 'key_permission_denied');
       if (a.version !== undefined && a.version !== d.version) throw err(`The draft is now version ${d.version}. Check the preview first.`, 409, 'version_changed');
       if (statusOf(d) !== 'draft') throw err('This draft was already sent or is being sent.', 409, 'already_sent');
       if (!d.providerDraftId) throw err('This draft is not saved in the mailbox yet. Call update_draft to retry saving it.', 409, 'provider_not_saved');
-      if (d.sendAt === sendAt) return;
-      d.sendAt = sendAt; d.version += 1; d.hash = contentHash(d); d.approval = null; d.send = null; d.updatedAt = new Date().toISOString();
+      if (d.sendAt !== sendAt) { d.sendAt = sendAt; d.version += 1; d.hash = contentHash(d); d.approval = null; d.send = null; d.updatedAt = new Date().toISOString(); }
+      return d.hash;
     });
+    if (auto) {
+      await autoApprove(who, a.draft_id, hash);
+      return { ...(await get(who, { draft_id: a.draft_id })), message: `Scheduled for ${sendAt}. Lockbox sends this exact email once at that time.` };
+    }
     return requestApproval(who, { draft_id: a.draft_id }, opts);
   }
   async function cancelSchedule(who, a = {}) {

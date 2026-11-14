@@ -304,3 +304,4 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .ai-draft-badge.ok, .ai-draft-badge.sent { background: #e3f4f1; color: #0f766e; }
 .ai-draft-badge.warn { background: #fff4d6; color: #8a5a00; }
 .ai-draft-badge.bad { background: #fde8e6; color: #b42318; }
+.key-editor-auto{display:block;margin-top:6px;font-size:13px}

@@ -23,14 +23,15 @@ export const demoKeys = {
 const PERMS = [
   { id: 'read', label: 'See emails', hint: 'Only emails you opened, with hidden parts replaced by their label.' },
   { id: 'drafts', label: 'Draft emails', hint: 'Create and edit drafts in Gmail or Outlook. Nothing is sent.' },
-  { id: 'send', label: 'Send emails', hint: 'Only after you approve the exact email in Lockbox, and only once.' },
+  { id: 'send', label: 'Send emails', hint: 'After you approve the exact email in Lockbox (or without approval where you allow it), and only once.' },
 ];
 export const summarize = perms => {
   const p = normalizePerms(perms);
   const what = PERMS.filter(x => p[x.id]).map(x => x.label.split(' ')[0]).join(', ') || 'Nothing';
-  if (p.mailboxes === 'all') return `All mailboxes · ${what}`;
+  const auto = p.autoSend.length ? ` · sends without approval (${p.autoSend.length})` : '';
+  if (p.mailboxes === 'all') return `All mailboxes · ${what}${auto}`;
   const n = Object.keys(p.mailboxes).length;
-  return n ? `${n} mailbox${n === 1 ? '' : 'es'} · ${what}` : 'No mailboxes';
+  return n ? `${n} mailbox${n === 1 ? '' : 'es'} · ${what}${auto}` : 'No mailboxes';
 };
 const setFlag = (f, id, on) => ({ ...f, [id]: on, ...(id === 'drafts' && !on ? { send: false } : {}), ...(id === 'send' && on ? { drafts: true } : {}) });
 
@@ -39,24 +40,30 @@ export function KeyEditor({ k, mailboxes = [], onSave, onCancel, onReconnect }) 
   const [all, setAll] = useState(start.mailboxes === 'all');
   const [allFlags, setAllFlags] = useState({ read: start.read, drafts: start.drafts, send: start.send });
   const [boxes, setBoxes] = useState(() => Object.fromEntries(mailboxes.map(b => [b.id, start.mailboxes === 'all' ? { read: start.read, drafts: start.drafts, send: start.send } : (start.mailboxes[b.id] || { read: false, drafts: false, send: false })])));
+  const [autoSend, setAutoSend] = useState(() => start.autoSend || []);
   const [saving, setSaving] = useState(false);
   const writable = b => b.provider !== 'imap';
   const save = async () => {
-    const next = all ? normalizePerms({ mailboxes: 'all', ...allFlags }) : normalizePerms({ mailboxes: Object.fromEntries(Object.entries(boxes).map(([id, f]) => { const b = mailboxes.find(x => x.id === id); return [id, b && !writable(b) ? { ...f, drafts: false, send: false } : f]; })) });
+    const auto = autoSend.filter(id => mailboxes.some(b => b.id === id && writable(b)));
+    const next = all ? normalizePerms({ mailboxes: 'all', ...allFlags, autoSend: auto }) : normalizePerms({ mailboxes: Object.fromEntries(Object.entries(boxes).map(([id, f]) => { const b = mailboxes.find(x => x.id === id); return [id, b && !writable(b) ? { ...f, drafts: false, send: false } : f]; })), autoSend: auto });
+    const added = next.autoSend.filter(id => !(start.autoSend || []).includes(id));
+    if (added.length && !confirm(`Let "${k.name}" send and schedule email from ${added.join(', ')} without asking you first? Each email it sends goes out right away (or at its scheduled time) with no approval page.`)) return;
     if (next.send && !normalizePerms(k.perms).send && !confirm(`Allow "${k.name}" to ask to send email? You'll still approve every email in Lockbox before it is sent.`)) return;
     setSaving(true); try { await onSave(next); } finally { setSaving(false); }
   };
+  const autoBox = (b, sendOn) => sendOn && writable(b) && <label key={`auto-${b.id}`} className="form-check key-editor-auto" title="The agent can send or schedule the exact draft it names without an approval page. Creating or editing a draft never sends it."><input type="checkbox" className="form-check-input" checked={autoSend.includes(b.id)} onChange={e => setAutoSend(x => e.target.checked ? [...new Set([...x, b.id])] : x.filter(id => id !== b.id))} aria-label={`Allow sending without per-email approval from ${b.email}`} /> <span className="form-check-label">Allow sending without per-email approval{all ? ` — ${b.email}` : ''}</span></label>;
   const row = (f, set, disabledWrite) => PERMS.map(p => <label key={p.id} className="form-check form-check-inline" title={p.hint}><input type="checkbox" className="form-check-input" checked={!!f[p.id]} disabled={p.id !== 'read' && disabledWrite} onChange={e => set(setFlag(f, p.id, e.target.checked))} /> <span className="form-check-label">{p.label}</span></label>);
   return <div className="modal-backdrop-lite" role="presentation" onClick={onCancel}>
     <div className="key-editor" role="dialog" aria-modal="true" aria-label={`Edit ${k.name}`} onClick={e => e.stopPropagation()}>
       <h2>Edit “{k.name}”</h2>
-      <p className="muted-copy">Choose which mailboxes this AI agent can use and what it may do there. Sending always waits for your approval.</p>
+      <p className="muted-copy">Choose which mailboxes this AI agent can use and what it may do there. Sending waits for your approval unless you allow a mailbox to send without per-email approval.</p>
       <label className="form-check key-editor-all"><input type="checkbox" className="form-check-input" checked={all} onChange={e => setAll(e.target.checked)} /> <span className="form-check-label">All mailboxes, including ones added later</span></label>
-      {all ? <div className="key-editor-box"><strong>Every mailbox</strong><div>{row(allFlags, setAllFlags, false)}</div></div>
+      {all ? <div className="key-editor-box"><strong>Every mailbox</strong><div>{row(allFlags, setAllFlags, false)}</div>{allFlags.send && mailboxes.map(b => autoBox(b, true))}</div>
         : mailboxes.length ? mailboxes.map(b => { const f = boxes[b.id] || {}; const on = !!(f.read || f.drafts); const needsSignIn = writable(b) && b.status === 'connected' && b.aiDrafts === false && (f.drafts || f.send);
           return <div className="key-editor-box" key={b.id}>
             <label className="form-check form-switch"><input type="checkbox" role="switch" className="form-check-input" checked={on} onChange={e => setBoxes(x => ({ ...x, [b.id]: e.target.checked ? { read: true, drafts: false, send: false } : { read: false, drafts: false, send: false } }))} aria-label={`Allow ${b.email}`} /> <strong>{b.email}</strong></label>
             {on && <div>{row(f, v => setBoxes(x => ({ ...x, [b.id]: v })), !writable(b))}</div>}
+            {on && autoBox(b, !!f.send)}
             {on && !writable(b) && <p className="muted-copy">Drafting and sending aren't available for this mailbox yet. Seeing emails works.</p>}
             {needsSignIn && <p className="muted-copy">Sign in again to allow drafting. <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => onReconnect?.(b)}>Sign in again</button></p>}
           </div>; })

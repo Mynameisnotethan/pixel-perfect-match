@@ -134,3 +134,13 @@ Remove-Item Env:LOCKBOX_READ_KEY,Env:LOCKBOX_DRAFT_KEY,Env:LOCKBOX_SEND_KEY
 The diagnostic runs `initialize`, `notifications/initialized`, and `tools/list`, preserving any negotiated protocol and `Mcp-Session-Id` headers. It prints only tool names and pass/fail results, never keys. Expected lists are two tools for read-only, four for drafts, and five for send. Safe permission probes use nonexistent draft ids and cannot create or send email. Delete the three temporary keys afterward.
 
 On the desktop app, the same endpoint is at `http://127.0.0.1:<port>/api/ai/v1/mcp`. It only works for apps running on that computer.
+
+## AI drafts, approval and scheduling
+
+Drafts an AI agent creates are kept in Lockbox and saved to the mailbox's own Drafts folder (Gmail or Outlook). They appear under **Drafts → From AI agents**, with where each one is saved and any provider error.
+
+MCP tools for keys with **Draft emails**: `create_draft`, `update_draft`, `list_drafts`, `get_draft`. With **Send emails** also: `send_draft`, `request_send_approval` (returns a review link, never sends), `schedule_send` (send time with a time zone, needs approval of that exact version and time), and `cancel_scheduled_send`. Any edit or new time clears the approval. Each approved version is sent at most once, including after restarts. On desktop, scheduled sends go out only while the app is open.
+
+Errors returned to agents include a `code` and a `request_id`. To trace one on the server: `docker compose logs mail | grep req_xxxxxxxxxxxx` (log lines hold codes and HTTP statuses only, never email content or keys).
+
+After the tool list changes, disconnect and reconnect Lockbox in ChatGPT so it loads the new tools.

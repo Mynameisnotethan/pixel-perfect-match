@@ -287,3 +287,20 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .key-editor-box > div { margin-top: .35rem; }
 .key-editor-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 .ai-key-summary { font-size: .85rem; margin-right: .35rem; }
+
+/* Drafts made by AI agents */
+.ai-drafts { margin: 0 0 12px; border: 1px solid var(--bs-border-color, #dfe6e6); border-radius: 10px; padding: 12px 14px; background: #fff; flex-basis: 100%; }
+.ai-drafts h2 { font-size: 14px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+.ai-drafts h2 span { font-weight: 400; color: #6b7a7a; }
+.ai-drafts ul { list-style: none; margin: 0; padding: 0; }
+.ai-drafts li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #eef2f2; }
+.ai-drafts li:first-child { border-top: 0; }
+.ai-draft-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
+.ai-draft-main span { color: #5b6b6b; overflow-wrap: anywhere; }
+.ai-draft-store { font-size: 12px; }
+.ai-draft-store.bad, .ai-drafts-error { color: #b42318; }
+.ai-draft-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.ai-draft-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eef2f2; color: #4c5b5b; white-space: nowrap; }
+.ai-draft-badge.ok, .ai-draft-badge.sent { background: #e3f4f1; color: #0f766e; }
+.ai-draft-badge.warn { background: #fff4d6; color: #8a5a00; }
+.ai-draft-badge.bad { background: #fde8e6; color: #b42318; }

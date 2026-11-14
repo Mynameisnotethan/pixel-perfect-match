@@ -95,6 +95,7 @@ const emptyDraft = account => normalizeDraft({ account, subject: '', body: '', b
 const titles = { ai: 'AI Access', everything: 'Everything', unread: 'Unread', flagged: 'Flagged', junk: 'Junk', trash: 'Trash', drafts: 'Drafts', scheduled: 'Scheduled', sent: 'Sent', archive: 'Archive', search: 'Search', contacts: 'Contacts', calendar: 'Calendar', servers: 'Mailboxes', settings: 'Site Settings', save: 'Save Settings', feeds: 'Feeds' };
 
 import MailboxDialog from './MailboxDialog.jsx';
+import AiDrafts from './AiDrafts.jsx';
 import { useAuth } from './AuthScreens.jsx';
 import { liveBridge, inboxToMessages, liveAccount, connectionInfo, downloadRemoteAttachment, fetchRemoteAttachment, forwardAttachments } from './mailbox-live.js';
 import { parseAccountView } from './mailbox-view.js';
@@ -466,6 +467,7 @@ export default function App() {
           </div>
           {selected.length > 0 && <div className="bulk-toolbar"><span>{selected.length} selected</span><Tool icon="envelope-open" label="Mark selected as read" onClick={() => { updateMessages(selected, { read: true }); setSelected([]); }} /><Tool icon="envelope" label="Mark selected as unread" onClick={() => { updateMessages(selected, { read: false }); setSelected([]); }} /><Tool icon="flag" label="Flag selected" onClick={() => { updateMessages(selected, { flagged: true }); setSelected([]); }} /><Tool icon="archive" label="Archive selected" onClick={() => move(selected, 'archive')} /><Tool icon="inbox" label="Move selected to Inbox" onClick={() => move(selected, 'inbox')} /><Tool icon="trash" label="Delete selected" onClick={() => remove(selected)} /><button className="btn btn-sm btn-link" onClick={() => setSelected([])}>Cancel</button></div>}
           {query && <div className="search-summary">Results for “{query}”<button onClick={() => setQuery('')}>Clear search <Icon name="x" /></button></div>}
+          {view === 'drafts' && !active && <AiDrafts />}
           <div className={`mail-workspace ${active && settings.readingPane ? 'with-reading-pane' : ''}`}>
             {(!active || settings.readingPane) && <section className="mail-list" aria-label="Messages">
               <table className="message_table table"><thead><tr><th aria-label="Selection" /><th aria-label="Flag" /><th>From</th><th>Subject</th><th className="source-heading">Source</th><th className="date-heading">Date</th></tr></thead><tbody>

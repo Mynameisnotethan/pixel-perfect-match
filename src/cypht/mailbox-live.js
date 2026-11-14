@@ -27,6 +27,7 @@ const webBridge = {
   logout: () => api('/api/auth/logout', { method: 'POST' }),
   // Hide-from-AI rules live on the server so the AI feed can enforce them.
   privacy: { get: () => api('/api/privacy'), put: body => api('/api/privacy', { method: 'PUT', body: JSON.stringify(body) }) },
+  aiDrafts: { list: () => api('/api/ai/drafts') },
   aiEndpoint: () => `${window.location.origin}/api/ai/v1`,
   aiKeys: {
     list: () => api('/api/ai/keys'),

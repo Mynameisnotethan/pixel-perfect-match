@@ -4,17 +4,18 @@ const EMAIL = /^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/;
 const MAX_BODY = 500_000;
 const MAX_HTML = 2_000_000;
 const MAX_ATTACHMENTS = 25 * 1024 * 1024;
-const invalid = () => Object.assign(new Error('invalid_message'), { status: 400 });
+// detail is a safe, content-free reason an agent or user can act on.
+const invalid = (detail = 'The message is not valid.') => Object.assign(new Error('invalid_message'), { status: 400, code: 'validation_error', detail });
 
 function addresses(value) {
   if (value === undefined || value === null || value === '') return [];
   if (Array.isArray(value)) {
-    if (value.length > 100 || value.some(item => typeof item !== 'string')) throw invalid();
+    if (value.length > 100 || value.some(item => typeof item !== 'string')) throw invalid('Recipients must be email addresses (at most 100).');
     value = value.join(',');
   }
-  if (typeof value !== 'string' || value.length > 20_000) throw invalid();
+  if (typeof value !== 'string' || value.length > 20_000) throw invalid('Recipients must be a list of email addresses.');
   const list = value.split(',').map(item => item.trim()).filter(Boolean);
-  if (list.length > 100 || list.some(item => !EMAIL.test(item))) throw invalid();
+  if (list.length > 100 || list.some(item => !EMAIL.test(item))) throw invalid('A recipient is not a valid email address (use name@example.com, at most 100).');
   return list;
 }
 
@@ -22,12 +23,12 @@ export function normalizeOutgoing(input = {}) {
   const to = addresses(input.to);
   const cc = addresses(input.cc);
   const bcc = addresses(input.bcc);
-  if (!to.length && !cc.length && !bcc.length) throw invalid();
+  if (!to.length && !cc.length && !bcc.length) throw invalid('Add at least one recipient in to, cc or bcc.');
   const subject = input.subject ?? '';
   const body = input.body ?? '';
   const html = input.html ?? '';
-  if (typeof subject !== 'string' || subject.length > 998 || /[\r\n]/.test(subject)) throw invalid();
-  if (typeof body !== 'string' || body.length > MAX_BODY || typeof html !== 'string' || html.length > MAX_HTML) throw invalid();
+  if (typeof subject !== 'string' || subject.length > 998 || /[\r\n]/.test(subject)) throw invalid('The subject must be one line of at most 998 characters.');
+  if (typeof body !== 'string' || body.length > MAX_BODY || typeof html !== 'string' || html.length > MAX_HTML) throw invalid('The body is too long.');
   if (input.attachments !== undefined && !Array.isArray(input.attachments)) throw invalid();
   let total = 0;
   const attachments = (input.attachments || []).map(item => {

@@ -7,7 +7,12 @@ const GRAPH = 'https://graph.microsoft.com/v1.0/me';
 async function api(url, token, init = {}) {
   const res = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) } });
   if (res.status === 401) { const e = new Error('unauthorized'); e.status = 401; throw e; }
-  if (!res.ok) throw Object.assign(new Error(`Provider request failed [${res.status}]: ${(await res.text()).slice(0, 300)}`), { providerStatus: res.status });
+  if (!res.ok) {
+    // Keep only the provider's status and error code; the response text can echo message content.
+    const text = await res.text(); let providerCode = '';
+    try { const j = JSON.parse(text); providerCode = String(j.error?.code || j.error?.status || '').slice(0, 80); } catch {}
+    throw Object.assign(new Error(`Provider request failed [${res.status}${providerCode ? ' ' + providerCode : ''}]`), { providerStatus: res.status, providerCode });
+  }
   return res.status === 202 || res.status === 204 ? null : res.json();
 }
 const MAX_DOWNLOAD = 25 * 1024 * 1024;

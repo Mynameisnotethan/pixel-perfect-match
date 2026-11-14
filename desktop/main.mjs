@@ -144,16 +144,19 @@ const feedLocal = async (_user, { mailbox } = {}) => buildFeed({
 const draftVault = vaultJson('aidrafts', '{}');
 const bind = (provider, t) => Object.fromEntries(['replyContext', 'createDraft', 'updateDraft', 'deleteDraft', 'sendDraft', 'draftExists'].map(k => [k, (...a) => mail[provider][k](t, ...a)]));
 // Desktop approval is a native dialog the agent cannot click: it shows the exact email and defaults to "Don't send".
-const confirmSend = async d => {
+const confirmSend = async (d, { approveOnly = false } = {}) => {
   const win = BrowserWindow.getAllWindows()[0];
   const detail = `From: ${d.from}\nTo: ${d.to || '—'}\nCC: ${d.cc || '—'}\nBCC: ${d.bcc || '—'}\nSubject: ${d.subject || '(no subject)'}\n\n${d.body.length > 4000 ? d.body.slice(0, 4000) + '\n…(open the draft in your mailbox to read the rest)' : d.body}`;
-  const r = await dialog.showMessageBox(win, { type: 'question', buttons: ["Don't send", 'Send this email'], defaultId: 0, cancelId: 0, noLink: true, title: 'Lockbox', message: 'An AI agent wants to send this email. Send it?', detail });
+  const r = await dialog.showMessageBox(win, { type: 'question', buttons: ["Don't send", approveOnly ? 'Approve' : 'Send this email'], defaultId: 0, cancelId: 0, noLink: true, title: 'Lockbox', message: d.send_at ? `An AI agent wants to send this email at ${new Date(d.send_at).toLocaleString()}. Approve?` : approveOnly ? 'An AI agent asks you to approve this email. Nothing is sent yet.' : 'An AI agent wants to send this email. Send it?', detail });
   return r.response === 1;
 };
 const aiDrafts = createDraftService({
   read: draftVault.read, write: draftVault.write, feedFor: feedLocal, confirm: confirmSend,
   withMailbox: async (_owner, id, fn) => { const scope = (await tokensFor(id))?.scope; return withToken(id, (t, b) => fn(b.provider === 'imap' ? null : bind(b.provider, t), { ...b, caps: aiCapabilities(b.provider, scope) })); },
 });
+on('aiDrafts:list', () => aiDrafts.ownerList(LOCAL_USER));
+// Scheduled sends run only while the desktop app is open; missed ones go out the next time it starts.
+setInterval(() => aiDrafts.runDue().catch(e => console.error(`[lockbox] scheduled sends: ${e.message}`)), 30_000);
 const aiRoutes = createAiRoutes({
   verifyKey: key => aiKeys.verify(key), inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
   feedFor: feedLocal,

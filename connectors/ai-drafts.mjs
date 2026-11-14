@@ -8,7 +8,7 @@ import { normalizeOutgoing } from './outgoing.mjs';
 import { can } from './ai-perms.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
-const err = (message, status = 400) => Object.assign(new Error(message), { status });
+const err = (message, status = 400, code = undefined) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 const emailOf = v => { const m = /<([^>]+)>/.exec(String(v || '')); return (m ? m[1] : String(v || '')).trim(); };
 const splitList = v => (Array.isArray(v) ? v : String(v || '').split(',')).map(x => emailOf(x)).filter(Boolean);
 const uniq = list => { const seen = new Set(); return list.filter(a => { const k = a.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }); };
@@ -24,12 +24,28 @@ export function effective(d) {
     bcc: uniq(d.bcc || []).join(', '),
     subject: d.subject, body: d.body,
     inReplyTo: d.reply?.inReplyTo || '',
+    // A scheduled time is part of what the owner approves, so changing it needs a new approval.
+    ...(d.sendAt ? { send_at: d.sendAt } : {}),
   };
 }
 /** Draft as handed to the provider: recipient lists flattened, reply recipients included. */
 const forProvider = d => { const e = effective(d); return { ...d, to: e.to, cc: e.cc, bcc: e.bcc }; };
 export const contentHash = d => sha(JSON.stringify(effective(d)));
 
+const PROVIDER_NAMES = { google: 'Gmail', microsoft: 'Outlook' };
+const providerName = d => PROVIDER_NAMES[d.provider || String(d.mailbox || '').split(':')[0]] || 'mailbox';
+/** Where the draft is kept: always in Lockbox; also in the mailbox's own Drafts folder once the provider accepted it. */
+export function storageOf(d) {
+  if (d.providerDraftId) return { storage_status: 'saved', saved_in: `Lockbox and ${providerName(d)} Drafts`, provider_draft_id: d.providerDraftId };
+  return { storage_status: 'provider_failed', saved_in: 'Lockbox only', provider_draft_id: null, provider_error: d.storageError || `${providerName(d)} did not save this draft.` };
+}
+function scheduleOf(d) {
+  if (!d.sendAt) return { send_at: null, schedule_status: null };
+  const sent = d.send?.status === 'sent' && d.send.hash === d.hash;
+  const approved = !!d.approval && d.approval.hash === d.hash;
+  return { send_at: d.sendAt, schedule_status: sent ? 'sent' : d.send?.status === 'failed' ? 'failed' : approved ? 'scheduled' : 'awaiting_approval' };
+}
+const statusOf = d => d.send?.status === 'sent' && d.send.hash === d.hash ? 'sent' : d.send?.status === 'unknown' ? 'send_status_unknown' : d.send?.status === 'sending' ? 'sending' : 'draft';
 /** What the agent is shown: never reveals parts of the original email the owner hid. */
 function aiPreview(d) {
   const e = effective(d);
@@ -38,16 +54,35 @@ function aiPreview(d) {
     draft_id: d.id, version: d.version, mailbox: d.mailbox, from: d.from,
     to: show(e.to), cc: show(e.cc), bcc: e.bcc, subject: d.mask?.subject || e.subject, body: e.body,
     reply_to_message_id: d.reply?.feedId || null,
-    status: d.send?.status === 'sent' && d.send.hash === d.hash ? 'sent' : d.send?.status === 'unknown' ? 'send_status_unknown' : 'draft',
+    status: statusOf(d),
     approved_for_sending: !!d.approval && d.approval.hash === d.hash,
+    ...storageOf(d), ...scheduleOf(d),
   };
 }
 /** What the owner is shown on the approval page: the real, complete content. */
-export const ownerPreview = d => ({ id: d.id, version: d.version, hash: d.hash, ...effective(d), approved: !!d.approval && d.approval.hash === d.hash, sent: d.send?.status === 'sent' && d.send.hash === d.hash, status: d.send?.status || 'draft' });
+export const ownerPreview = d => ({ id: d.id, version: d.version, hash: d.hash, ...effective(d), approved: !!d.approval && d.approval.hash === d.hash, sent: d.send?.status === 'sent' && d.send.hash === d.hash, status: d.send?.status || 'draft', createdAt: d.createdAt, updatedAt: d.updatedAt, ...storageOf(d), ...scheduleOf(d) });
 
-const pickText = (v, name, max) => { if (v === undefined) return undefined; if (typeof v !== 'string' || v.length > max) throw err(`${name} must be text (max ${max} characters).`); return v; };
-const pickList = (v, name) => { if (v === undefined) return undefined; if (!(typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string')))) throw err(`${name} must be a list of addresses.`); return splitList(v); };
+const pickText = (v, name, max) => { if (v === undefined) return undefined; if (typeof v !== 'string' || v.length > max) throw err(`${name} must be text (max ${max} characters).`, 400, 'validation_error'); return v; };
+const pickList = (v, name) => { if (v === undefined) return undefined; if (!(typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string')))) throw err(`${name} must be a list of addresses.`, 400, 'validation_error'); return splitList(v); };
 // Ambiguous = the provider may have sent it (network failure, timeout, 5xx). Clear 4xx answers mean it did not.
+/** Explains a provider failure without echoing provider text (it can contain message content). */
+export function providerFailure(e, d) {
+  const name = providerName(d);
+  if (e?.message === 'reconnect_required' || e?.status === 401) return `${name} sign-in expired. Sign in to this mailbox again in Lockbox → Mailboxes.`;
+  if (e?.providerStatus === 403) return `${name} refused access${e.providerCode ? ` (${e.providerCode})` : ''}. Sign in again from Lockbox → AI Access → Edit to allow drafts.`;
+  if (e?.providerStatus) return `${name} returned HTTP ${e.providerStatus}${e.providerCode ? ` (${e.providerCode})` : ''}.`;
+  return `Could not reach ${name}.`;
+}
+const MIN_LEAD = 60_000, MAX_LEAD = 366 * 24 * 60 * 60_000;
+/** send_at must name its time zone (Z or ±hh:mm) so a schedule never shifts with the server's clock. */
+export function parseSendAt(v, now = Date.now()) {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(v)) throw err('send_at must be an ISO 8601 time with a time zone, for example 2026-11-20T09:00:00-05:00.', 400, 'validation_error');
+  const t = Date.parse(v);
+  if (!Number.isFinite(t)) throw err('send_at is not a real date.', 400, 'validation_error');
+  if (t < now + MIN_LEAD) throw err('send_at must be at least one minute in the future.', 400, 'validation_error');
+  if (t > now + MAX_LEAD) throw err('send_at must be within one year.', 400, 'validation_error');
+  return new Date(t).toISOString();
+}
 const ambiguous = e => !(e.status === 409 || (e.providerStatus >= 400 && e.providerStatus < 500 && ![408, 429].includes(e.providerStatus)));
 
 /**
@@ -60,13 +95,13 @@ const ambiguous = e => !(e.status === 409 || (e.providerStatus >= 400 && e.provi
 export function createDraftService({ read, write, withMailbox, feedFor, confirm = null }) {
   let queue = Promise.resolve();
   const mutate = fn => { const run = queue.then(async () => { const db = { drafts: {}, ...((await read()) || {}) }; const out = await fn(db); await write(db); return out; }); queue = run.catch(() => {}); return run; };
-  const own = (db, who, id) => { const d = typeof id === 'string' && db.drafts[id]; if (!d || d.owner !== who.user) throw err('Draft not found.', 404); return d; };
-  const allowBox = (who, id, need) => { if (who.perms && !can(who.perms, id, need)) throw err(`This API key is not allowed to ${need === 'send' ? 'send from' : 'draft in'} ${id}. The owner can change this in Lockbox → AI Access → Edit.`, 403); };
+  const own = (db, who, id) => { const d = typeof id === 'string' && db.drafts[id]; if (!d || d.owner !== who.user || (who.perms && !can(who.perms, d.mailbox, 'drafts'))) throw err('Draft not found.', 404, 'not_found'); return d; };
+  const allowBox = (who, id, need) => { if (who.perms && !can(who.perms, id, need)) throw err(`This API key is not allowed to ${need === 'send' ? 'send from' : 'draft in'} ${id}. The owner can change this in Lockbox → AI Access → Edit.`, 403, 'key_permission_denied'); };
   const needCaps = (box, need) => {
-    if (!['google', 'microsoft'].includes(box.provider)) throw err('AI drafts work with Gmail and Outlook mailboxes only.');
-    if (!box.caps?.[need]) throw err(`This mailbox has not allowed Lockbox to ${need === 'send' ? 'send' : 'save drafts'} for AI yet. The owner can sign in again from Lockbox → AI Access → Edit for ${box.email}, then try again. Reading still works meanwhile.`, 409);
+    if (!['google', 'microsoft'].includes(box.provider)) throw err('AI drafts work with Gmail and Outlook mailboxes only.', 400, 'unsupported_mailbox');
+    if (!box.caps?.[need]) throw err(`This mailbox has not allowed Lockbox to ${need === 'send' ? 'send' : 'save drafts'} for AI yet. The owner can sign in again from Lockbox → AI Access → Edit for ${box.email}, then try again. Reading still works meanwhile.`, 409, 'mailbox_authorization_required');
   };
-  const validate = d => { const e = effective(d); normalizeOutgoing({ to: e.to, cc: e.cc, bcc: e.bcc, subject: e.subject, body: e.body }); };
+  const validate = d => { const e = effective(d); try { normalizeOutgoing({ to: e.to, cc: e.cc, bcc: e.bcc, subject: e.subject, body: e.body }); } catch (x) { throw err(x.detail || 'The draft is not valid.', 400, 'validation_error'); } };
 
   async function create(who, a = {}) {
     const to = pickList(a.to, 'to') || [], cc = pickList(a.cc, 'cc') || [], bcc = pickList(a.bcc, 'bcc') || [];
@@ -81,10 +116,10 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       mailbox = orig.mailbox; d.reply = { feedId: fid };
       d._orig = orig;
     }
-    if (!mailbox) throw err('mailbox is required (for example google:me@gmail.com). list_messages shows mailbox ids.');
+    if (!mailbox) throw err('mailbox is required (for example google:me@gmail.com). list_messages shows mailbox ids.', 400, 'validation_error');
     d.mailbox = mailbox;
     return withMailbox(who.user, mailbox, async (api, box) => {
-      allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); d.from = box.email;
+      allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); d.from = box.email; d.provider = box.provider;
       if (d.reply) {
         const orig = d._orig; delete d._orig;
         const ctx = await api.replyContext(String(orig.id).slice(box.id.length + 1));
@@ -104,8 +139,10 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       }
       d.subject = subject ?? ''; d.reply_all = a.reply_all === true;
       validate(d); d.hash = contentHash(d);
-      const { providerDraftId } = await api.createDraft(box.email, forProvider(d));
-      d.providerDraftId = providerDraftId; d.updatedAt = d.createdAt;
+      // Kept in Lockbox even if the provider refuses, so the owner sees it and the agent can retry with update_draft.
+      try { d.providerDraftId = (await api.createDraft(box.email, forProvider(d))).providerDraftId || null; }
+      catch (e) { d.providerDraftId = null; d.storageError = providerFailure(e, d); console.error(`[lockbox] ai draft ${d.id} provider save failed: ${e.providerStatus || e.status || 'network'} ${e.providerCode || ''}`); }
+      d.updatedAt = d.createdAt;
       await mutate(db => {
         db.drafts[d.id] = d;
         const ids = Object.keys(db.drafts); if (ids.length > MAX_DRAFTS) for (const id of ids.slice(0, ids.length - MAX_DRAFTS)) delete db.drafts[id];
@@ -131,6 +168,13 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       const made = await withMailbox(who.user, mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); const n = { ...next, mailbox, from: box.email }; return { ...(await api.createDraft(box.email, forProvider(n))), from: box.email }; });
       await withMailbox(who.user, current.mailbox, api => api.deleteDraft(current.providerDraftId)).catch(() => {});
       Object.assign(next, { mailbox, from: made.from, providerDraftId: made.providerDraftId });
+    } else if (!current.providerDraftId) {
+      // The provider refused earlier: try saving it there again.
+      await withMailbox(who.user, current.mailbox, async (api, box) => {
+        allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts');
+        try { next.providerDraftId = (await api.createDraft(box.email, forProvider(next))).providerDraftId || null; delete next.storageError; }
+        catch (e) { next.storageError = providerFailure(e, next); }
+      });
     } else if (hash !== current.hash) {
       await withMailbox(who.user, current.mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); await api.updateDraft(box.email, current.providerDraftId, forProvider(next)); });
     }
@@ -138,12 +182,15 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       const d = own(db, who, a.draft_id);
       if (d.version !== current.version) throw err('The draft changed while you were editing it. Try again.', 409);
       if (contentHash(next) !== d.hash) { Object.assign(d, next, { version: d.version + 1, hash: contentHash(next), approval: null, updatedAt: new Date().toISOString() }); }
+      else if (next.providerDraftId !== d.providerDraftId || next.storageError !== d.storageError) { d.providerDraftId = next.providerDraftId; if (next.storageError) d.storageError = next.storageError; else delete d.storageError; d.updatedAt = new Date().toISOString(); }
       return aiPreview(d);
     });
   }
 
-  async function send(who, a = {}, { approvalUrl = id => `/api/ai/approve/${id}` } = {}) {
+  async function send(who, a = {}, { approvalUrl = id => `/api/ai/approve/${id}`, scheduled = false } = {}) {
     let d = await mutate(db => structuredClone(own(db, who, a.draft_id)));
+    if (d.sendAt && !scheduled && d.send?.status !== 'sent') return { ...aiPreview(d), status: 'scheduled', message: 'This draft is scheduled. Lockbox sends it at send_at once approved. Use cancel_scheduled_send to send it another way.' };
+    if (!d.providerDraftId) throw err(`This draft is not saved in ${providerName(d)} yet (${d.storageError || 'provider save failed'}). Call update_draft to retry saving it, then send.`, 409, 'provider_not_saved');
     if (a.version !== undefined && a.version !== d.version) throw err(`The draft is now version ${d.version}. Check the preview and ask the owner to approve that version.`, 409);
     // Reconcile an earlier attempt whose result was unclear before doing anything else.
     if (d.send && d.send.hash === d.hash && ['sending', 'unknown'].includes(d.send.status)) {
@@ -157,6 +204,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       let approved = false;
       if (confirm) { try { approved = await confirm(ownerPreview(d)); } catch { approved = false; } }
       if (approved) await approve(who.user, d.id, d.hash);
+      else if (scheduled) return { ...aiPreview(d), status: 'approval_required' };
       else return { ...aiPreview(d), status: 'approval_required', approval_url: approvalUrl(d.id), message: confirm ? 'The owner did not approve this version in Lockbox. Nothing was sent.' : 'Nothing was sent. Ask the owner to open approval_url, check the exact email and approve it, then call send_draft again.' };
     }
     // Claim this version for sending inside the queue, so parallel calls cannot both send.
@@ -174,9 +222,10 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       return { ...aiPreview(done), status: 'sent', provider_message_id: done.send.messageId };
     } catch (e) {
       const unknown = ambiguous(e);
-      const after = await mutate(db => { const x = own(db, who, a.draft_id); x.send = unknown ? { ...x.send, status: 'unknown' } : null; return structuredClone(x); });
+      const after = await mutate(db => { const x = own(db, who, a.draft_id); x.send = unknown ? { ...x.send, status: 'unknown' } : scheduled ? { ...x.send, status: 'failed', error: providerFailure(e, x) } : null; return structuredClone(x); });
       if (unknown) return { ...aiPreview(after), status: 'send_status_unknown', message: 'The mail provider did not confirm the send. Nothing will be resent until Lockbox checks whether it went out. Call send_draft again later.' };
-      throw err(e.status === 409 ? e.message : 'The mail provider refused to send this draft. Nothing was sent.', e.status === 409 ? 409 : 502);
+      if (scheduled) return { ...aiPreview(after), status: 'failed' };
+      throw err(e.status === 409 ? e.message : `${providerFailure(e, after)} Nothing was sent.`, e.status === 409 ? 409 : 502, e.status === 409 ? (e.code || 'mailbox_authorization_required') : 'provider_error');
     }
   }
 
@@ -189,5 +238,69 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
   });
   const ownerView = (owner, id) => mutate(db => { const d = db.drafts[id]; if (!d || d.owner !== owner) return null; return ownerPreview(d); });
 
-  return { create, update, send, approve, ownerView };
+  async function list(who, a = {}) {
+    const mailbox = pickText(a.mailbox, 'mailbox', 300);
+    const n = Math.min(Math.max(Math.trunc(Number(a.limit)) || 25, 1), 100);
+    return mutate(db => ({ drafts: Object.values(db.drafts)
+      .filter(d => d.owner === who.user && (!mailbox || d.mailbox === mailbox) && (!who.perms || can(who.perms, d.mailbox, 'drafts')))
+      .sort((x, y) => String(y.updatedAt || y.createdAt).localeCompare(String(x.updatedAt || x.createdAt))).slice(0, n).map(aiPreview) }));
+  }
+  const get = (who, a = {}) => mutate(db => aiPreview(own(db, who, a.draft_id)));
+
+  /** Asks the owner to review the exact current version. Never sends, even when already approved. */
+  async function requestApproval(who, a = {}, { approvalUrl = id => `/api/ai/approve/${id}` } = {}) {
+    const d = await mutate(db => structuredClone(own(db, who, a.draft_id)));
+    if (who.perms && !can(who.perms, d.mailbox, 'send')) throw err(`This API key is not allowed to send from ${d.mailbox}.`, 403, 'key_permission_denied');
+    if (a.version !== undefined && a.version !== d.version) throw err(`The draft is now version ${d.version}. Check the preview first.`, 409, 'version_changed');
+    if (statusOf(d) === 'sent') return { ...aiPreview(d), message: 'This draft was already sent.' };
+    if (d.approval?.hash === d.hash) return { ...aiPreview(d), approval_url: confirm ? null : approvalUrl(d.id), message: 'Already approved. Nothing was sent.' };
+    if (confirm) {
+      let ok = false; try { ok = await confirm(ownerPreview(d), { approveOnly: true }); } catch { ok = false; }
+      if (ok) { await approve(who.user, d.id, d.hash); return { ...aiPreview({ ...d, approval: { hash: d.hash } }), message: 'The owner approved this version. Nothing was sent yet.' }; }
+      return { ...aiPreview(d), message: 'The owner did not approve this version. Nothing was sent.' };
+    }
+    return { ...aiPreview(d), approval_url: approvalUrl(d.id), message: 'Nothing was sent. Ask the owner to open approval_url and approve this exact version.' };
+  }
+
+  /** Sets or replaces the send time. The time is part of the approved content, so this always needs a new approval. */
+  async function schedule(who, a = {}, opts = {}) {
+    const sendAt = parseSendAt(a.send_at);
+    await mutate(db => {
+      const d = own(db, who, a.draft_id);
+      if (who.perms && !can(who.perms, d.mailbox, 'send')) throw err(`This API key is not allowed to send from ${d.mailbox}.`, 403, 'key_permission_denied');
+      if (a.version !== undefined && a.version !== d.version) throw err(`The draft is now version ${d.version}. Check the preview first.`, 409, 'version_changed');
+      if (statusOf(d) !== 'draft') throw err('This draft was already sent or is being sent.', 409, 'already_sent');
+      if (!d.providerDraftId) throw err('This draft is not saved in the mailbox yet. Call update_draft to retry saving it.', 409, 'provider_not_saved');
+      if (d.sendAt === sendAt) return;
+      d.sendAt = sendAt; d.version += 1; d.hash = contentHash(d); d.approval = null; d.send = null; d.updatedAt = new Date().toISOString();
+    });
+    return requestApproval(who, { draft_id: a.draft_id }, opts);
+  }
+  async function cancelSchedule(who, a = {}) {
+    return mutate(db => {
+      const d = own(db, who, a.draft_id);
+      if (who.perms && !can(who.perms, d.mailbox, 'send')) throw err(`This API key is not allowed to send from ${d.mailbox}.`, 403, 'key_permission_denied');
+      if (!d.sendAt) return { ...aiPreview(d), message: 'This draft was not scheduled.' };
+      if (statusOf(d) !== 'draft') throw err('Too late: this draft was already sent or is being sent.', 409, 'already_sent');
+      delete d.sendAt; d.version += 1; d.hash = contentHash(d); d.approval = null; d.send = null; d.updatedAt = new Date().toISOString();
+      return { ...aiPreview(d), message: 'Schedule cancelled. Nothing was sent.' };
+    });
+  }
+  /** Sends approved scheduled drafts whose time has come. Safe to run from a timer and after restarts. */
+  let running = false;
+  async function runDue(now = Date.now()) {
+    if (running) return []; running = true;
+    try {
+      const due = await mutate(db => Object.values(db.drafts).filter(d => d.sendAt && Date.parse(d.sendAt) <= now && d.approval?.hash === d.hash && (!d.send || d.send.hash !== d.hash || ['sending', 'unknown'].includes(d.send.status))).map(d => ({ id: d.id, owner: d.owner })));
+      const out = [];
+      for (const { id, owner } of due) {
+        try { out.push(await send({ user: owner, perms: null }, { draft_id: id }, { scheduled: true })); }
+        catch (e) { console.error(`[lockbox] scheduled draft ${id} failed: ${e.code || e.status || 'error'}`); }
+      }
+      return out;
+    } finally { running = false; }
+  }
+  const ownerList = owner => mutate(db => Object.values(db.drafts).filter(d => d.owner === owner).sort((x, y) => String(y.updatedAt || y.createdAt).localeCompare(String(x.updatedAt || x.createdAt))).map(ownerPreview));
+
+  return { create, update, send, approve, ownerView, list, get, requestApproval, schedule, cancelSchedule, runDue, ownerList };
 }

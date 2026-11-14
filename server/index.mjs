@@ -262,6 +262,10 @@ http.createServer(async (req, res) => {
       try { return html(200, approvedPage(await aiDrafts.approve(user, m[1], String(form.hash || '')))); }
       catch (e) { if (e.status === 409) return html(409, approvePage(await aiDrafts.ownerView(user, m[1]), session.csrf, e.message)); throw e; }
     }
+    if (url.pathname === '/api/ai/drafts' && req.method === 'GET') {
+      if (!user) return send(res, 401, { error: 'sign_in_required' });
+      return send(res, 200, await aiDrafts.ownerList(user));
+    }
     if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const keyId = decodeURIComponent(url.pathname.slice('/api/ai/keys/'.length) || '');
@@ -293,4 +297,6 @@ http.createServer(async (req, res) => {
     console.error(`[lockbox] ${req.method} ${url.pathname}: ${e.message}`); // message only, never passwords, tokens or query strings
     return send(res, e.status || 500, { error: e.message });
   }
-}).listen(Number(env.PORT || 3000), async () => { await loadConfig(); await auth.bootstrap(); console.log(`[lockbox] mailbox server on :${env.PORT || 3000}`); });
+}).listen(Number(env.PORT || 3000), async () => {
+  // Scheduled AI drafts live in the encrypted draft file, so they survive restarts; each version is sent once.
+  setInterval(() => aiDrafts.runDue().catch(e => console.error(`[lockbox] scheduled sends: ${e.message}`)), 30_000).unref(); await loadConfig(); await auth.bootstrap(); console.log(`[lockbox] mailbox server on :${env.PORT || 3000}`); });

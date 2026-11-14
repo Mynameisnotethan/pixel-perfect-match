@@ -7,6 +7,7 @@ import { can } from './ai-perms.mjs';
 // client receives tokens tied to that key. Each token is re-checked against the key store on every
 // call, so deleting the key cuts the client off immediately.
 import { createHash, randomBytes } from 'node:crypto';
+import { providerFailure } from './ai-drafts.mjs';
 
 export const MCP_PROTOCOL = '2025-06-18';
 const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -56,6 +57,42 @@ export const DRAFT_TOOLS = [
     } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
+  {
+    name: 'list_drafts', title: 'List email drafts',
+    description: 'List drafts made with create_draft, newest first, with version, preview, where each is saved (storage_status, provider_draft_id), approval and schedule status.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {
+      mailbox: { type: 'string', maxLength: 300, description: 'Only drafts from this mailbox id.' },
+      limit: { type: 'integer', minimum: 1, maximum: 100, description: 'How many drafts (default 25).' },
+    } },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: 'get_draft', title: 'Read email draft',
+    description: 'Read one draft by draft_id: version, preview, storage status, provider draft id, approval, send and schedule status.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: { draft_id: { type: 'string', maxLength: 100 } } },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  },
+];
+const DRAFT_REF = { draft_id: { type: 'string', maxLength: 100 }, version: { type: 'integer', minimum: 1, description: 'The version you showed the owner. Fails if the draft changed.' } };
+export const APPROVAL_TOOLS = [
+  {
+    name: 'request_send_approval', title: 'Ask owner to approve',
+    description: 'Ask the owner to review and approve the exact current version of a draft. Returns approval_url for the owner. Never sends anything, even when the draft is already approved.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: DRAFT_REF },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: 'schedule_send', title: 'Schedule draft',
+    description: 'Schedule a draft to be sent at send_at (ISO 8601 with a time zone, e.g. 2026-11-20T09:00:00-05:00). The owner must approve this exact version and time via the returned approval_url; Lockbox then sends it once at that time. Rescheduling needs a new approval. Use get_draft for schedule_status.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id', 'send_at'], properties: { ...DRAFT_REF, send_at: { type: 'string', maxLength: 40 } } },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  },
+  {
+    name: 'cancel_scheduled_send', title: 'Cancel scheduled send',
+    description: 'Cancel a scheduled send before it goes out. The draft stays and its approval is cleared.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['draft_id'], properties: { draft_id: { type: 'string', maxLength: 100 } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
 ];
 export const SEND_TOOL = {
   name: 'send_draft', title: 'Send approved draft',
@@ -69,7 +106,7 @@ export const SEND_TOOL = {
 export const toolsFor = (perms = {}, drafts = null) => [
   ...(perms.read !== false ? MCP_TOOLS : []),
   ...(drafts && perms.drafts ? DRAFT_TOOLS : []),
-  ...(drafts && perms.send ? [SEND_TOOL] : []),
+  ...(drafts && perms.send ? [SEND_TOOL, ...APPROVAL_TOOLS] : []),
 ];
 const INSTRUCTIONS = 'Access to the owner\'s Lockbox mailbox, limited by what their API key allows. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. Some keys may also create and edit drafts; sending always needs the owner to approve the exact email in Lockbox. Never claim an email was sent unless send_draft returned status sent.';
 
@@ -94,16 +131,31 @@ export async function handleMcpMessage(msg, { user, feedFor, perms = { read: tru
       const toolErr = text => ok({ content: [{ type: 'text', text }], isError: true });
       if (typeof a !== 'object' || Array.isArray(a)) return toolErr('Arguments must be an object.');
       const allowed = toolsFor(perms, drafts).map(t => t.name);
-      if ([...MCP_TOOLS, ...DRAFT_TOOLS, SEND_TOOL].some(t => t.name === p.name) && !allowed.includes(p.name)) return toolErr('This API key is not allowed to use that tool. The owner can change key permissions in Lockbox → AI Access.');
+      if ([...MCP_TOOLS, ...DRAFT_TOOLS, SEND_TOOL, ...APPROVAL_TOOLS].some(t => t.name === p.name) && !allowed.includes(p.name)) return toolErr('This API key is not allowed to use that tool. The owner can change key permissions in Lockbox → AI Access.');
       const draftCall = async (fn, keys) => {
         const extra = Object.keys(a).filter(k => !keys.includes(k));
         if (extra.length) return toolErr(`Unknown argument: ${extra[0]}`);
         try { const r = await fn(); return ok({ content: [{ type: 'text', text: JSON.stringify(r) }], structuredContent: r }); }
-        catch (e) { if (e.status && e.status < 500 || e.status === 502) return toolErr(e.message); throw e; }
+        catch (e) {
+          // Sanitized, actionable error with a request id the owner can find in the server log.
+          const request_id = 'req_' + randomBytes(6).toString('hex');
+          const code = e.code || (e.message === 'reconnect_required' ? 'mailbox_authorization_expired' : e.providerStatus ? 'provider_error' : e.status === 404 ? 'not_found' : e.status && e.status < 500 ? 'validation_error' : 'server_error');
+          const message = code === 'mailbox_authorization_expired' || code === 'provider_error' ? providerFailure(e, { mailbox: a.mailbox || '' })
+            : code === 'server_error' ? 'Lockbox could not finish this request.' : e.detail || e.message;
+          console.error(`[lockbox] mcp ${p.name} ${request_id} code=${code} status=${e.status || ''} provider=${e.providerStatus || ''} ${e.providerCode || ''}`);
+          const error = { code, message, request_id };
+          return ok({ content: [{ type: 'text', text: `${message} [${code}, request ${request_id}]` }], structuredContent: { error }, isError: true });
+        }
       };
       const who = { user, keyId, perms };
       if (p.name === 'create_draft') return draftCall(() => drafts.create(who, a), ['mailbox', 'reply_to_message_id', 'reply_all', 'to', 'cc', 'bcc', 'subject', 'body']);
       if (p.name === 'update_draft') return draftCall(() => drafts.update(who, a), ['draft_id', 'mailbox', 'to', 'cc', 'bcc', 'subject', 'body']);
+      const approvalUrl = id => `${base}/api/ai/approve/${encodeURIComponent(id)}`;
+      if (p.name === 'list_drafts') return draftCall(() => drafts.list(who, a), ['mailbox', 'limit']);
+      if (p.name === 'get_draft') return draftCall(() => drafts.get(who, a), ['draft_id']);
+      if (p.name === 'request_send_approval') return draftCall(() => drafts.requestApproval(who, a, { approvalUrl }), ['draft_id', 'version']);
+      if (p.name === 'schedule_send') return draftCall(() => drafts.schedule(who, a, { approvalUrl }), ['draft_id', 'version', 'send_at']);
+      if (p.name === 'cancel_scheduled_send') return draftCall(() => drafts.cancelSchedule(who, a), ['draft_id']);
       if (p.name === 'send_draft') return draftCall(() => drafts.send(who, a, { approvalUrl: id => `${base}/api/ai/approve/${encodeURIComponent(id)}` }), ['draft_id', 'version']);
       if (p.name === 'list_messages') {
         const extra = Object.keys(a).filter(k => !['limit', 'mailbox'].includes(k));

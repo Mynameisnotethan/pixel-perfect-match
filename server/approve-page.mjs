@@ -8,12 +8,12 @@ const shell = (title, inner) => `<!doctype html><html><head><meta charset="utf-8
 export const approvePage = (d, csrf, note = '') => shell('Approve email', `<h1>Approve this email?</h1>
 <p>An AI agent asked to send this from your mailbox. Check every line. Only this exact version will be sent, once. If the agent changes it, you'll be asked again.</p>
 ${note ? `<p class="err">${esc(note)}</p>` : ''}
-<dl><dt>From</dt><dd>${esc(d.from)}</dd><dt>To</dt><dd>${esc(d.to) || '—'}</dd><dt>CC</dt><dd>${esc(d.cc) || '—'}</dd><dt>BCC</dt><dd>${esc(d.bcc) || '—'}</dd><dt>Subject</dt><dd>${esc(d.subject) || '(no subject)'}</dd><dt>Version</dt><dd>${esc(d.version)}</dd></dl>
+<dl><dt>From</dt><dd>${esc(d.from)}</dd><dt>To</dt><dd>${esc(d.to) || '—'}</dd><dt>CC</dt><dd>${esc(d.cc) || '—'}</dd><dt>BCC</dt><dd>${esc(d.bcc) || '—'}</dd><dt>Subject</dt><dd>${esc(d.subject) || '(no subject)'}</dd>${d.send_at ? `<dt>Send at</dt><dd>${esc(new Date(d.send_at).toUTCString())}</dd>` : ''}<dt>Version</dt><dd>${esc(d.version)}</dd></dl>
 <pre>${esc(d.body)}</pre>
 <form method="post" class="row"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="hash" value="${esc(d.hash)}">
 <a class="btn secondary" href="/">Not now</a><button type="submit">Approve sending</button></form>`);
 
-export const approvedPage = d => shell('Approved', `<h1 class="ok">Approved</h1><p>${d.sent ? 'This email was already sent.' : 'Go back to your AI app and ask it to send the draft. It will be sent once.'}</p><dl><dt>To</dt><dd>${esc(d.to)}</dd><dt>Subject</dt><dd>${esc(d.subject)}</dd></dl><div class="row"><a class="btn secondary" href="/">Open Lockbox</a></div>`);
+export const approvedPage = d => shell('Approved', `<h1 class="ok">Approved</h1><p>${d.sent ? 'This email was already sent.' : d.send_at ? `Lockbox will send it once at ${esc(new Date(d.send_at).toUTCString())}.` : 'Go back to your AI app and ask it to send the draft. It will be sent once.'}</p><dl><dt>To</dt><dd>${esc(d.to)}</dd><dt>Subject</dt><dd>${esc(d.subject)}</dd></dl><div class="row"><a class="btn secondary" href="/">Open Lockbox</a></div>`);
 
 export const messagePage = (title, text) => shell(title, `<h1>${esc(title)}</h1><p>${esc(text)}</p><div class="row"><a class="btn secondary" href="/">Open Lockbox</a></div>`);
 

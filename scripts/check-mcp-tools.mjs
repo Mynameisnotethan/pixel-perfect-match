@@ -11,7 +11,7 @@ export const MCP_LEVELS = [
   },
   {
     label: 'draft-enabled', env: 'LOCKBOX_DRAFT_KEY',
-    expected: ['list_messages', 'get_message', 'create_draft', 'update_draft'],
+    expected: ['list_messages', 'get_message', 'create_draft', 'update_draft', 'list_drafts', 'get_draft'],
     probes: [
       { name: 'update_draft', arguments: { draft_id: 'drf_mcp_permission_probe' }, match: /draft not found/i },
       { name: 'send_draft', arguments: { draft_id: 'drf_mcp_permission_probe' }, match: /not allowed/i },
@@ -19,7 +19,7 @@ export const MCP_LEVELS = [
   },
   {
     label: 'send-enabled', env: 'LOCKBOX_SEND_KEY',
-    expected: ['list_messages', 'get_message', 'create_draft', 'update_draft', 'send_draft'],
+    expected: ['list_messages', 'get_message', 'create_draft', 'update_draft', 'list_drafts', 'get_draft', 'send_draft', 'request_send_approval', 'schedule_send', 'cancel_scheduled_send'],
     probes: [{ name: 'send_draft', arguments: { draft_id: 'drf_mcp_permission_probe' }, match: /draft not found/i }],
   },
 ];

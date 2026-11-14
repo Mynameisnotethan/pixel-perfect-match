@@ -103,3 +103,13 @@ For the detailed command-line deployment, automatic updates, optional Windows bu
 ## AI agents
 
 Server: `https://YOUR-DOMAIN/api/ai/v1/messages` with `Authorization: Bearer lbx_...`. Desktop app: `http://127.0.0.1:47615/api/ai/v1/messages` (change the port with `LOCKBOX_AI_PORT`). The desktop address only works on that computer while Lockbox is open. Redaction uses the hide-from-AI rules that Lockbox stores itself: encrypted on the server, or in the OS vault on desktop.
+
+## Connect AI apps with MCP
+
+Lockbox has a built-in MCP server at `https://<your-domain>/api/ai/v1/mcp`. It is read-only and only returns emails you have reviewed, with hidden parts already replaced.
+
+- **ChatGPT:** go to Settings, then Apps & Connectors, then Create (Developer mode). Paste the URL and choose OAuth. A Lockbox page opens: paste an `lbx_` key from AI Access there and click Allow.
+- **Claude Desktop, Cursor and others:** add a remote (Streamable HTTP) server with that URL and the header `Authorization: Bearer lbx_...`.
+- To disconnect an app, delete its key in AI Access.
+
+On the desktop app, the same endpoint is at `http://127.0.0.1:<port>/api/ai/v1/mcp`. It only works for apps running on that computer.

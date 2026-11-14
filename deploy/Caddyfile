@@ -3,7 +3,7 @@
 # password or password hash ever lives in this file.
 {$LOCKBOX_DOMAIN} {
 	encode gzip
-	@mail path /oauth/* /api/*
+	@mail path /oauth/* /api/* /.well-known/oauth-* /.well-known/openid-configuration
 	handle @mail {
 		reverse_proxy mail:3000
 	}

@@ -11,7 +11,8 @@ export function mailUpstream(): string | null {
 }
 
 export function shouldForwardToMail(pathname: string): boolean {
-  return pathname === "/api" || pathname.startsWith("/api/") || pathname.startsWith("/oauth/");
+  return pathname === "/api" || pathname.startsWith("/api/") || pathname.startsWith("/oauth/") ||
+    pathname.startsWith("/.well-known/oauth-") || pathname === "/.well-known/openid-configuration";
 }
 
 export async function forwardToMail(

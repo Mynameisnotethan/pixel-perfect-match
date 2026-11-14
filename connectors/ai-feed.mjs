@@ -1,4 +1,5 @@
 import { aiOpenApi } from './ai-openapi.mjs';
+import { createMcpRoutes } from './ai-mcp.mjs';
 // The AI agent feed: an agent sends `Authorization: Bearer lbx_...` and gets the same redacted view as
 // "What the AI sees". Redaction runs here from rules saved by the owner, never from what a caller sends.
 // Shared by the Docker mail server and the desktop app.
@@ -63,9 +64,11 @@ export function createLimiter(max = 60, windowMs = 60_000) {
  * Handles GET /api/ai/v1/messages and /api/ai/v1/messages/:id. Returns false for other paths.
  * feedFor(user, { mailbox }) must return buildFeed() output for that user only.
  */
-export function createAiRoutes({ verifyKey, feedFor, limit = createLimiter() }) {
+export function createAiRoutes({ verifyKey, feedFor, limit = createLimiter(), oauth = null }) {
+  const mcp = createMcpRoutes({ verifyKey, feedFor, limit, oauth });
   const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   return async (req, res, url) => {
+    if (await mcp(req, res, url)) return true;
     if (!url.pathname.startsWith('/api/ai/v1/')) return false;
     if (url.pathname === '/api/ai/v1/openapi.json' && req.method === 'GET') {
       const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0] || (req.socket?.encrypted ? 'https' : 'http');

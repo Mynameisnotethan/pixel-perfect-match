@@ -22,3 +22,22 @@ You can read my Lockbox mailbox through the Lockbox actions (read-only).
 
 API description: ${schema}`;
 }
+
+/** Setup steps for MCP clients (ChatGPT apps, Claude, Cursor). Never contains the key. */
+export function buildMcpSetup({ endpoint, keyName }) {
+  const url = `${endpoint}/mcp`;
+  const local = /\/\/(127\.0\.0\.1|localhost)/.test(endpoint);
+  return `Lockbox MCP server (read-only, reviewed emails only; hidden parts show as [hidden: Label])
+URL: ${url}
+Key: the "${keyName}" key (starts with lbx_). Never paste it into a chat.
+${local ? `\nThis address only works on this computer while Lockbox is open, so ChatGPT on the web cannot use it.\n` : `
+ChatGPT: Settings > Apps & Connectors > Create (Developer mode). Paste the URL, choose OAuth, then Create. A Lockbox page opens: paste the key there and click Allow.
+`}
+Claude Desktop / Cursor / other MCP clients: add a remote (Streamable HTTP) server with the URL and the header
+  Authorization: Bearer <your lbx_ key>
+
+Cursor example (~/.cursor/mcp.json):
+{ "mcpServers": { "lockbox": { "url": "${url}", "headers": { "Authorization": "Bearer \${env:LOCKBOX_KEY}" } } } }
+
+Tools: list_messages (limit, mailbox), get_message (id). Deleting the key in Lockbox disconnects every app using it.`;
+}

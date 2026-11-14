@@ -15,7 +15,8 @@ import { createImapClient, normalizeImap } from '../connectors/imap.mjs';
 import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
 import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
-import { createKeyStore } from './apikeys.mjs';
+import { createKeyStore, encryptedFile } from './apikeys.mjs';
+import { createOAuthStore } from '../connectors/ai-mcp.mjs';
 import { createPrivacyStore } from './privacy-store.mjs';
 import { createAiRoutes, buildFeed } from '../connectors/ai-feed.mjs';
 import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
@@ -112,6 +113,7 @@ async function withToken(user, id, fn) {
 
 // AI agents: a personal API key maps to exactly one user; only that user's mailboxes and rules are used.
 const aiRoutes = createAiRoutes({
+  oauth: createOAuthStore(encryptedFile({ file: path.join(DATA_DIR, 'mcp-oauth.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) })),
   verifyKey: key => aiKeys.verify(key),
   feedFor: async (owner, { mailbox }) => buildFeed({
     boxes: (await load())[owner] || [], mailbox, privacy: await privacy.get(owner),
@@ -128,7 +130,7 @@ http.createServer(async (req, res) => {
   const secure = secureCookies(req);
   try {
     // State-changing calls from a signed-in browser must echo the session's CSRF token.
-    if (session && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.headers[CSRF_COOKIE] !== session.csrf
+    if (session && !url.pathname.startsWith('/api/ai/v1/') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.headers[CSRF_COOKIE] !== session.csrf
       && req.headers['x-lockbox-csrf'] !== session.csrf) return send(res, 403, { error: 'csrf_check_failed' });
 
     let m;

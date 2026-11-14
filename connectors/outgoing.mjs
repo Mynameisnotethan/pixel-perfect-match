@@ -8,6 +8,10 @@ const invalid = () => Object.assign(new Error('invalid_message'), { status: 400 
 
 function addresses(value) {
   if (value === undefined || value === null || value === '') return [];
+  if (Array.isArray(value)) {
+    if (value.length > 100 || value.some(item => typeof item !== 'string')) throw invalid();
+    value = value.join(',');
+  }
   if (typeof value !== 'string' || value.length > 20_000) throw invalid();
   const list = value.split(',').map(item => item.trim()).filter(Boolean);
   if (list.length > 100 || list.some(item => !EMAIL.test(item))) throw invalid();

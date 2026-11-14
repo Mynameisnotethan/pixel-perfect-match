@@ -229,3 +229,22 @@ describe("Mailbox consent", () => {
     expect(refreshScope("microsoft", "Mail.Read User.Read")).toBe("Mail.Read User.Read offline_access");
   });
 });
+
+describe("Self-addressed Outlook draft", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("creates a plain-text draft with array recipients and returns id and preview", async () => {
+    const { createDraftService } = await import("../../connectors/ai-drafts.mjs");
+    const calls: any[] = [];
+    vi.stubGlobal("fetch", async (url: any, init: any = {}) => { calls.push({ url: String(url), init }); return new Response(JSON.stringify({ id: "AAMk1" }), { status: 201 }); });
+    const svc = createDraftService({ read: async () => ({}), write: async () => {}, feedFor: async () => [],
+      withMailbox: async (_o: string, id: string, fn: any) => fn({ createDraft: (from: string, d: any) => mail.microsoft.createDraft("tok", from, d) }, { id, email: "ethenry1982@outlook.com", provider: "microsoft", caps: { drafts: true, send: true } }) });
+    const r: any = await svc.create({ user: "o", perms: { read: true, drafts: true, send: true } }, { mailbox: "microsoft:ethenry1982@outlook.com", to: ["ethenry1982@outlook.com"], subject: "Lockbox test email", body: "This is a test email from Lockbox." });
+    expect(r.draft_id).toMatch(/^drf_/);
+    expect(r.to).toBe("ethenry1982@outlook.com");
+    expect(r.approved_for_sending).toBe(false);
+    const body = JSON.parse(calls[0].init.body);
+    expect(body.toRecipients).toEqual([{ emailAddress: { address: "ethenry1982@outlook.com" } }]);
+    expect(body.ccRecipients).toEqual([]);
+    expect(body.body).toEqual({ contentType: "Text", content: "This is a test email from Lockbox." });
+  });
+});

@@ -26,6 +26,8 @@ export function effective(d) {
     inReplyTo: d.reply?.inReplyTo || '',
   };
 }
+/** Draft as handed to the provider: recipient lists flattened, reply recipients included. */
+const forProvider = d => { const e = effective(d); return { ...d, to: e.to, cc: e.cc, bcc: e.bcc }; };
 export const contentHash = d => sha(JSON.stringify(effective(d)));
 
 /** What the agent is shown: never reveals parts of the original email the owner hid. */
@@ -102,7 +104,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       }
       d.subject = subject ?? ''; d.reply_all = a.reply_all === true;
       validate(d); d.hash = contentHash(d);
-      const { providerDraftId } = await api.createDraft(box.email, d);
+      const { providerDraftId } = await api.createDraft(box.email, forProvider(d));
       d.providerDraftId = providerDraftId; d.updatedAt = d.createdAt;
       await mutate(db => {
         db.drafts[d.id] = d;
@@ -126,11 +128,11 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
     const hash = contentHash({ ...next, mailbox: mailbox || next.mailbox });
     if (mailbox && mailbox !== current.mailbox) {
       // Moving to another of the owner's mailboxes: create there first, then remove the old draft.
-      const made = await withMailbox(who.user, mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); const n = { ...next, mailbox, from: box.email }; return { ...(await api.createDraft(box.email, n)), from: box.email }; });
+      const made = await withMailbox(who.user, mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); const n = { ...next, mailbox, from: box.email }; return { ...(await api.createDraft(box.email, forProvider(n))), from: box.email }; });
       await withMailbox(who.user, current.mailbox, api => api.deleteDraft(current.providerDraftId)).catch(() => {});
       Object.assign(next, { mailbox, from: made.from, providerDraftId: made.providerDraftId });
     } else if (hash !== current.hash) {
-      await withMailbox(who.user, current.mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); await api.updateDraft(box.email, current.providerDraftId, next); });
+      await withMailbox(who.user, current.mailbox, async (api, box) => { allowBox(who, box.id, 'drafts'); needCaps(box, 'drafts'); await api.updateDraft(box.email, current.providerDraftId, forProvider(next)); });
     }
     return mutate(db => {
       const d = own(db, who, a.draft_id);

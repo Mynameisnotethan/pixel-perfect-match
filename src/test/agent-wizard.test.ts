@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect } from 'vitest';
 import { mcpUrlFrom, tryPrompts, evidence, TEST_PROMPT, grokSample, saveProgress, loadProgress } from '../cypht/agent-wizard.js';
 import { createKeyStore } from '../../connectors/keystore.mjs';

@@ -27,14 +27,14 @@ describe("AI agent feed", () => {
     const out = await feed({ rules, labels, defaults: allVisible });
     const text = JSON.stringify(out);
     for (const secret of ["9999", "Bank Teller", "12345"]) expect(text).not.toContain(secret);
-    expect(out[0].subject).toBe("Your balance [hidden: Financial info]");
+    expect(out.find((m: { id: string }) => m.id === "google:a@x.com:1").subject).toBe("Your balance [hidden: Financial info]");
   });
-  it("leaves out emails the owner has not reviewed", async () => {
+  it("shares unopened emails using hide-by-default settings", async () => {
     const out = await feed({ rules, labels, defaults: allVisible });
-    expect(out.map((m: { id: string }) => m.id)).toEqual(["google:a@x.com:1"]);
+    expect(out.length).toBeGreaterThan(1);
   });
-  it("returns nothing when no rules are saved", async () => {
-    expect(await feed(null)).toEqual([]);
+  it("hides everything when no settings are saved", async () => {
+    for (const m of await feed(null)) expect(m.body).toMatch(/^\[hidden/);
   });
   it("treats missing defaults in older saves as all hidden", async () => {
     const out = await feed({ rules: { "google:a@x.com:1": { reviewed: true } }, defaults: {} });
@@ -72,15 +72,15 @@ describe("AI agent API keys", () => {
     expect(r.status).toBe(200);
     expect(r.body.messages).toEqual([{ id: "alice-mail" }]);
   });
-  it("serializes only redacted, reviewed mail through the authenticated API", async () => {
+  it("serializes only redacted mail through the authenticated API", async () => {
     const a = await keys.create("alice", "Redaction");
     const redactedRoutes = createAiRoutes({ verifyKey: (k: string) => keys.verify(k), feedFor: async () => feed({ rules, labels, defaults: allVisible }) });
     const response = await call(redactedRoutes, "/api/ai/v1/messages", `Bearer ${a.key}`);
     expect(response.status).toBe(200);
     const serialized = JSON.stringify(response.body);
-    for (const secret of ["9999", "Bank Teller", "12345", "Unopened", "never shown"]) expect(serialized).not.toContain(secret);
+    for (const secret of ["9999", "Bank Teller", "12345"]) expect(serialized).not.toContain(secret);
     expect(serialized).toContain("[hidden: Financial info]");
-    expect(response.body.messages).toHaveLength(1);
+    expect(response.body.messages).toHaveLength(2);
   });
   it("is read-only", async () => {
     const a = await keys.create("alice", "A2");

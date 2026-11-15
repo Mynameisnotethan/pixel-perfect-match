@@ -207,7 +207,6 @@ export function hideEntireMessage(message, label) {
 }
 
 export function lockStatus(raw, defaults) {
-  if (!raw.reviewed && isReceived(raw)) return 'grey';
   const m = applyDefaults(raw, defaults);
   const fields = fieldsFor(m);
   const textLen = fields.reduce((length, { field }) => length + (m[field] || '').length, 0);
@@ -220,7 +219,6 @@ export function lockStatus(raw, defaults) {
 }
 
 export function aiView(raw, defaults, labels) {
-  if (lockStatus(raw, defaults) === 'grey') return null;
   const m = applyDefaults(raw, defaults);
   const hidden = m.hiddenAttachments || [];
   const attachments = (m.attachments || []).map((a, i) => hidden.includes(i) ? { name: tag(m.hiddenAttachmentLabels?.[i], labels), hidden: true } : { name: a.name });

@@ -19,7 +19,7 @@ export const TEST_PROMPT = 'Use Lockbox’s get_access tool and tell me the key 
 export function tryPrompts(perms) {
   const p = normalizePerms(perms);
   const out = [];
-  if (p.read) out.push({ id: 'list', label: 'List recent reviewed emails', text: 'Use Lockbox to list my 5 most recent reviewed emails with sender, subject and date.' });
+  if (p.read) out.push({ id: 'list', label: 'List recent emails', text: 'Use Lockbox to list my 5 most recent emails with sender, subject and date.' });
   if (p.drafts) out.push({ id: 'draft', label: 'Create a self-addressed test draft', text: 'Use Lockbox to create a draft addressed to my own mailbox address with the subject "Lockbox test" and the body "This is a test from my assistant." Tell me the draft id and version. Do not send it.' });
   if (p.send) {
     out.push({ id: 'send', label: 'Send that draft', text: 'Use Lockbox to send the "Lockbox test" draft you just created, using its exact draft id and version.' });

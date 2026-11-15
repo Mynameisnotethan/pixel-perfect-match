@@ -10,8 +10,7 @@ import { RULE_KEYS, rulesFrom, pickRules, cleanPrivacy, parseFrom, inboxToMessag
 export { RULE_KEYS, rulesFrom, pickRules, cleanPrivacy, parseFrom, inboxToMessages };
 
 /**
- * Builds the redacted feed. Without saved rules nothing is returned, because every email counts as
- * not reviewed (grey) until its owner opens it in Lockbox.
+ * Builds the redacted feed. Emails without saved rules follow the owner's hide-by-default settings.
  */
 export async function buildFeed({ boxes, fetchInbox, privacy, mailbox }) {
   const p = privacy || { rules: {} };

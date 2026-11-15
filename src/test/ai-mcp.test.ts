@@ -49,14 +49,14 @@ describe("MCP endpoint", () => {
     expect((await s.rpc(msg)).status).toBe(401);
     s.close();
   });
-  it("returns only reviewed mail with hidden parts redacted", async () => {
+  it("returns mail with hidden parts redacted", async () => {
     const s = await setup();
     const r = await (await s.rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_messages", arguments: {} } })).json();
     const text = JSON.stringify(r.result);
-    expect(r.result.structuredContent.messages).toHaveLength(1);
-    for (const secret of ["9999", "12345", "Unreviewed secret"]) expect(text).not.toContain(secret);
+    expect(r.result.structuredContent.messages).toHaveLength(2);
+    for (const secret of ["9999", "12345"]) expect(text).not.toContain(secret);
     const g = await (await s.rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "get_message", arguments: { id: "google:a@x.com:2" } } })).json();
-    expect(g.result.isError).toBe(true);
+    expect(g.result.isError).toBeFalsy();
     s.close();
   });
   it("applies the rate limit", async () => {

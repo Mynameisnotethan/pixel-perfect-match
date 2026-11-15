@@ -4,7 +4,7 @@ import { PROVIDERS, STEPS, mcpUrlFrom, isLocalUrl, TEST_PROMPT, tryPrompts, evid
 
 const Icon = ({ name }) => <i className={`bi bi-${name}`} aria-hidden="true" />;
 const FLAGS = [
-  { id: 'read', label: 'Read reviewed emails' },
+  { id: 'read', label: 'Read emails' },
   { id: 'drafts', label: 'Manage drafts' },
   { id: 'send', label: 'Send emails' },
 ];

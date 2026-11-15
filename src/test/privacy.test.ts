@@ -3,7 +3,7 @@ import { lockStatus, mergeRanges, subtractRange, aiView, mask, togglePrivacyFiel
 import { describe, expect, it } from "vitest";
 const base = { id: "1", body: "hello world", attachments: [{ name: "a.txt" }], folder: "inbox" };
 describe("privacy lock", () => {
-  it("unopened is grey and invisible to AI", () => { expect(lockStatus(base)).toBe("grey"); expect(aiView(base)).toBeNull(); });
+  it("unopened follows hide-by-default settings", () => { expect(lockStatus(base, { body: false, attachments: false, subject: false, sender: false, email: false })).toBe("green"); expect(aiView(base, { body: true }).body).not.toContain("hello"); });
   it("opened with nothing hidden is green", () => expect(lockStatus({ ...base, reviewed: true })).toBe("green"));
   it("partly hidden is yellow", () => expect(lockStatus({ ...base, reviewed: true, hiddenRanges: [[0, 5]] })).toBe("yellow"));
   it("fully hidden is red", () => expect(lockStatus({ ...base, reviewed: true, hiddenRanges: [[0, 11]], hiddenAttachments: [0] })).toBe("red"));

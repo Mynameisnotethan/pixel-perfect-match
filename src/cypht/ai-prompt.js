@@ -11,10 +11,10 @@ ${local ? `\nNote: this address (${endpoint}) only works on my own computer whil
 
 ---
 You can read my Lockbox mailbox through the Lockbox actions (read-only).
-- listMessages: list recent reviewed emails (use limit, up to 100; mailbox to filter).
+- listMessages: list recent emails (use limit, up to 100; mailbox to filter).
 - getMessage: read one email by id.
 - Anything shown as [hidden: Label] was hidden by me. Never guess, infer, or ask for hidden content; you may mention its label (e.g. "Financial info").
-- Only emails I have reviewed are shared. If something is missing, say it isn't shared rather than assuming it doesn't exist.
+- Some parts of emails may be hidden from you. If something is missing, say it isn't shared rather than assuming it doesn't exist.
 - You cannot send, delete, or change email.
 ---
 
@@ -27,7 +27,7 @@ API description: ${schema}`;
 export function buildMcpSetup({ endpoint, keyName }) {
   const url = `${endpoint}/mcp`;
   const local = /\/\/(127\.0\.0\.1|localhost)/.test(endpoint);
-  return `Lockbox MCP server (reviewed emails only; hidden parts show as [hidden: Label]; this key's permissions decide whether drafts and sending are allowed)
+  return `Lockbox MCP server (hidden parts show as [hidden: Label]; this key's permissions decide whether drafts and sending are allowed)
 URL: ${url}
 Key: the "${keyName}" key (starts with lbx_). Never paste it into a chat.
 ${local ? `\nThis address only works on this computer while Lockbox is open, so ChatGPT on the web cannot use it.\n` : `

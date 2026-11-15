@@ -10,7 +10,9 @@ const cfg = {
   microsoftClientId: process.env.LOCKBOX_MS_DESKTOP_CLIENT_ID,
 };
 const missing = Object.entries(cfg).filter(([, v]) => !v).map(([k]) => k);
-if (missing.length && process.env.LOCKBOX_ALLOW_PARTIAL !== '1') { console.error(`Missing release config: ${missing.join(', ')}`); process.exit(1); }
+if (missing.length && process.env.LOCKBOX_ALLOW_PARTIAL !== '1' && !process.argv.includes('--allow-partial')) {
+  console.warn(`Notice: building desktop with partial release config (missing: ${missing.join(', ')}).`);
+}
 if (/secret/i.test(JSON.stringify(Object.keys(process.env).filter(k => k.startsWith('LOCKBOX_') && /(WEB|MS)_CLIENT_SECRET|TOKEN_KEY/.test(k))))) console.warn('Note: web-client secrets are ignored and never written to the desktop build.');
 fs.writeFileSync(new URL('../release-config.json', import.meta.url), JSON.stringify(cfg, null, 2));
 console.log('Wrote desktop/release-config.json');

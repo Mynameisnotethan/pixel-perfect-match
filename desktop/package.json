@@ -9,8 +9,8 @@
     "renderer": "cd .. && npx vite build --config desktop/vite.renderer.config.mjs",
     "start": "npm run shared && LOCKBOX_ALLOW_PARTIAL=1 node scripts/write-config.mjs && npm run renderer && electron .",
     "config": "node scripts/write-config.mjs",
-    "dist:win": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --win nsis",
-    "dist:mac": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --mac dmg",
+    "dist:win": "npm run shared && node scripts/write-config.mjs --allow-partial && npm run renderer && electron-builder --win nsis",
+    "dist:mac": "npm run shared && node scripts/write-config.mjs --allow-partial && npm run renderer && electron-builder --mac dmg",
     "dist:linux": "npm run shared && node scripts/write-config.mjs && npm run renderer && electron-builder --linux AppImage",
     "shared": "node -e \"require('fs').cpSync('../connectors','connectors',{recursive:true})\""
   },

@@ -163,6 +163,7 @@ setInterval(() => aiDrafts.runDue().catch(e => console.error(`[lockbox] schedule
 const aiRoutes = createAiRoutes({
   verifyKey: key => aiKeys.verify(key), inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
   feedFor: feedLocal,
+  mailboxesFor: async () => Promise.all((await readIndex()).map(async b => ({ id: b.id, email: b.email, provider: b.provider, caps: aiCapabilities(b.provider, (await tokensFor(b.id))?.scope) }))),
 });
 // Loopback only: other computers on the network cannot reach it. Browsers are refused (no CORS, Origin checked).
 function startAiServer() {

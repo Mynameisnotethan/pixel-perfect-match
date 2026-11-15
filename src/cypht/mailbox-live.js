@@ -35,6 +35,7 @@ const webBridge = {
     create: name => api('/api/ai/keys', { method: 'POST', body: JSON.stringify({ name }) }),
     remove: id => api(`/api/ai/keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     setPerms: (id, perms) => api(`/api/ai/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ perms }) }),
+    disconnectApp: (id, clientId) => api(`/api/ai/keys/${encodeURIComponent(id)}/apps/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   },
   // Gmail (and Outlook when the admin set up a web app): the browser goes to the provider and back.
   // Outlook otherwise uses a one-time code, so no Entra app is needed on this server.

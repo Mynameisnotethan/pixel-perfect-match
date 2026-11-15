@@ -30,9 +30,16 @@ export function createKeyStore({ read, write }) {
       if (!/^lbx_[A-Za-z0-9_-]{20,}$/.test(String(key || ''))) return Promise.resolve(null);
       return mutate(db => {
         const h = Buffer.from(sha(String(key)));
-        for (const [user, keys] of Object.entries(db)) for (const k of keys) if (timingSafeEqual(Buffer.from(k.hash), h)) { k.lastUsedAt = new Date().toISOString(); return { user, keyId: k.id, perms: normalizePerms(k.perms) }; }
+        for (const [user, keys] of Object.entries(db)) for (const k of keys) if (timingSafeEqual(Buffer.from(k.hash), h)) { k.lastUsedAt = new Date().toISOString(); return { user, keyId: k.id, keyName: k.name, last4: k.last4, perms: normalizePerms(k.perms) }; }
         return null;
       });
+    },
+    /** Which user and key a plaintext key belongs to, without recording a use. Used to list connected apps. */
+    identify: async key => {
+      if (!/^lbx_[A-Za-z0-9_-]{20,}$/.test(String(key || ''))) return null;
+      const h = Buffer.from(sha(String(key)));
+      for (const [user, keys] of Object.entries(await read())) for (const k of keys) if (timingSafeEqual(Buffer.from(k.hash), h)) return { user, keyId: k.id };
+      return null;
     },
     /** Returns the owning user for a plaintext key and records its use, or null. */
     verify: key => {

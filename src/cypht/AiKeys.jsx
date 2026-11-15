@@ -44,8 +44,11 @@ export function KeyEditor({ k, mailboxes = [], onSave, onCancel, onReconnect }) 
   const [saving, setSaving] = useState(false);
   const writable = b => b.provider !== 'imap';
   const save = async () => {
-    const auto = autoSend.filter(id => mailboxes.some(b => b.id === id && writable(b)));
-    const next = all ? normalizePerms({ mailboxes: 'all', ...allFlags, autoSend: auto }) : normalizePerms({ mailboxes: Object.fromEntries(Object.entries(boxes).map(([id, f]) => { const b = mailboxes.find(x => x.id === id); return [id, b && !writable(b) ? { ...f, drafts: false, send: false } : f]; })), autoSend: auto });
+    // Mailboxes that haven't loaded on this screen keep what was saved for them; they are never silently erased.
+    const shown = id => mailboxes.find(b => b.id === id);
+    const auto = autoSend.filter(id => { const b = shown(id); return b ? writable(b) : true; });
+    const unseen = start.mailboxes === 'all' ? {} : Object.fromEntries(Object.entries(start.mailboxes).filter(([id]) => !shown(id)));
+    const next = all ? normalizePerms({ mailboxes: 'all', ...allFlags, autoSend: auto }) : normalizePerms({ mailboxes: { ...unseen, ...Object.fromEntries(Object.entries(boxes).map(([id, f]) => { const b = shown(id); return [id, b && !writable(b) ? { ...f, drafts: false, send: false } : f]; })) }, autoSend: auto });
     const added = next.autoSend.filter(id => !(start.autoSend || []).includes(id));
     if (added.length && !confirm(`Let "${k.name}" send and schedule email from ${added.join(', ')} without asking you first? Each email it sends goes out right away (or at its scheduled time) with no approval page.`)) return;
     if (next.send && !normalizePerms(k.perms).send && !confirm(`Allow "${k.name}" to ask to send email? You'll still approve every email in Lockbox before it is sent.`)) return;
@@ -94,7 +97,19 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
   };
   const savePerms = async (k, next) => {
     setError('');
-    try { await store().setPerms(k.id, next); setEditing(null); refresh(); onNotify('Permissions saved. Disconnect and reconnect ChatGPT to update its tools.'); } catch (err) { setError(err.message); }
+    try {
+      const saved = await store().setPerms(k.id, next);
+      setEditing(null); refresh();
+      // Read back what the server kept: an older mail server silently drops settings it doesn't know.
+      const kept = normalizePerms(saved?.perms).autoSend;
+      const lost = next.autoSend.filter(id => !kept.some(x => x.toLowerCase() === id.toLowerCase()));
+      if (lost.length) setError(`The server did not keep "Allow sending without per-email approval" for ${lost.join(', ')}. Its mail service is probably an older version: redeploy with the latest images (keep lockbox-data), then turn it on again.`);
+      else onNotify('Permissions saved. Refresh or reconnect ChatGPT to update its tools.');
+    } catch (err) { setError(err.message); }
+  };
+  const disconnectApp = async (k, a) => {
+    if (!confirm(`Disconnect ${a.name} from "${k.name}"? It will need to sign in again with a key.`)) return;
+    try { await liveBridge()?.aiKeys?.disconnectApp(k.id, a.clientId); refresh(); onNotify(`${a.name} disconnected.`); } catch (err) { setError(err.message); }
   };
   const remove = async k => {
     if (!confirm(`Delete "${k.name}"? Anything using this key will stop working.`)) return;
@@ -109,7 +124,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
     {error && <div className="ai-key-error" role="alert">{error}</div>}
     {endpoint ? <div className="ai-endpoint"><strong>Give your AI agent this address and a key</strong><div className="ai-key-copy"><code>{endpoint}/messages</code><button className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(`${endpoint}/messages`); onNotify('Address copied.'); }}><Icon name="clipboard" /> Copy</button></div><p className="muted-copy">Example: <code>curl -H "Authorization: Bearer lbx_…" {endpoint}/messages?limit=10</code>. Agents only get emails you have opened, with hidden parts replaced by their label. Each key can only read until you allow more below. Sending always waits for your approval of the exact email.{liveBridge()?.runtime === 'desktop' && ' This address works only on this computer, while Lockbox is open.'}</p></div>
       : demo && <p className="muted-copy ai-endpoint">Demo: AI agents can connect once Lockbox runs on your server or the desktop app.</p>}
-    {keys.length ? <table className="ai-key-table"><thead><tr><th>Name</th><th>Key</th><th>Allowed</th><th>Created</th><th>Last used</th><th /></tr></thead><tbody>{keys.map(k => { const pm = normalizePerms(k.perms); return <tr key={k.id}><td data-label="Name">{k.name}</td><td data-label="Key"><code>lbx_••••{k.last4}</code></td><td data-label="Allowed"><span className="ai-key-summary">{summarize(pm)}</span> <button className="btn btn-sm btn-outline-secondary" aria-label={`Edit ${k.name}`} onClick={() => setEditing(k)}><Icon name="pencil" /> Edit</button></td><td data-label="Created">{day(k.createdAt)}</td><td data-label="Last used">{day(k.lastUsedAt)}</td><td className="ai-key-actions">{endpoint && <button className="btn btn-sm btn-outline-secondary" title="Copy a setup prompt for ChatGPT or other agents (does not include the key)" aria-label={`Copy ChatGPT prompt for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildChatGptPrompt({ endpoint, keyName: k.name })); onNotify('ChatGPT prompt copied. Paste the key only into the GPT’s Authentication field.'); }}><Icon name="chat-left-text" /> ChatGPT prompt</button>}{endpoint && <> <button className="btn btn-sm btn-outline-secondary" title="Copy the MCP address and setup steps for ChatGPT, Claude or Cursor (does not include the key)" aria-label={`Copy MCP setup for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildMcpSetup({ endpoint, keyName: k.name })); onNotify('MCP setup copied. Paste the key only into the app’s sign-in or settings, never a chat.'); }}><Icon name="plug" /> MCP setup</button></>} <button className="btn btn-sm btn-outline-danger" aria-label={`Delete ${k.name}`} onClick={() => remove(k)}><Icon name="trash" /></button></td></tr>; })}</tbody></table>
+    {keys.length ? <table className="ai-key-table"><thead><tr><th>Name</th><th>Key</th><th>Allowed</th><th>Created</th><th>Last used</th><th /></tr></thead><tbody>{keys.map(k => { const pm = normalizePerms(k.perms); return <tr key={k.id}><td data-label="Name">{k.name}</td><td data-label="Key"><code>lbx_••••{k.last4}</code></td><td data-label="Allowed"><span className="ai-key-summary">{summarize(pm)}</span>{!!k.apps?.length && <span className="ai-key-apps">Connected apps: {k.apps.map(a => <span key={a.clientId} className="ai-key-app">{a.name} <small>(since {day(a.connectedAt)}{a.lastUsedAt ? `, used ${day(a.lastUsedAt)}` : ''})</small> <button className="btn btn-link btn-sm p-0" aria-label={`Disconnect ${a.name} from ${k.name}`} onClick={() => disconnectApp(k, a)}>Disconnect</button></span>)}</span>} <button className="btn btn-sm btn-outline-secondary" aria-label={`Edit ${k.name}`} onClick={() => setEditing(k)}><Icon name="pencil" /> Edit</button></td><td data-label="Created">{day(k.createdAt)}</td><td data-label="Last used">{day(k.lastUsedAt)}</td><td className="ai-key-actions">{endpoint && <button className="btn btn-sm btn-outline-secondary" title="Copy a setup prompt for ChatGPT or other agents (does not include the key)" aria-label={`Copy ChatGPT prompt for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildChatGptPrompt({ endpoint, keyName: k.name })); onNotify('ChatGPT prompt copied. Paste the key only into the GPT’s Authentication field.'); }}><Icon name="chat-left-text" /> ChatGPT prompt</button>}{endpoint && <> <button className="btn btn-sm btn-outline-secondary" title="Copy the MCP address and setup steps for ChatGPT, Claude or Cursor (does not include the key)" aria-label={`Copy MCP setup for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildMcpSetup({ endpoint, keyName: k.name })); onNotify('MCP setup copied. Paste the key only into the app’s sign-in or settings, never a chat.'); }}><Icon name="plug" /> MCP setup</button></>} <button className="btn btn-sm btn-outline-danger" aria-label={`Delete ${k.name}`} onClick={() => remove(k)}><Icon name="trash" /></button></td></tr>; })}</tbody></table>
       : <div className="ai-key-empty"><Icon name="key" /> No API keys yet.</div>}
     {editing && <KeyEditor k={editing} mailboxes={mailboxes} onCancel={() => setEditing(null)} onSave={next => savePerms(editing, next)} onReconnect={onReconnect} />}
   </div>;

@@ -28,12 +28,12 @@ async function setup({ max = 60 } = {}) {
 }
 
 describe("MCP endpoint", () => {
-  it("initializes and lists the two read-only tools", async () => {
+  it("initializes and lists the read-only tools", async () => {
     const s = await setup();
     const init = await (await s.rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).json();
     expect(init.result.protocolVersion).toBe("2025-06-18");
     const list = await (await s.rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
-    expect(list.result.tools.map(t => t.name)).toEqual(["list_messages", "get_message"]);
+    expect(list.result.tools.map(t => t.name)).toEqual(["list_messages", "get_message", "get_access"]);
     expect(list.result.tools.every(t => t.annotations.readOnlyHint)).toBe(true);
     expect((await s.rpc({ jsonrpc: "2.0", method: "notifications/initialized" })).status).toBe(202);
     s.close();

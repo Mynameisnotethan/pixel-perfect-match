@@ -1,6 +1,6 @@
-import { can } from './ai-perms.mjs';
+import { can, boxPerms, canAutoSend } from './ai-perms.mjs';
 /** Build marker shown in MCP initialize, so the owner can tell which code a server runs. Bump when MCP behaviour changes. */
-export const LOCKBOX_VERSION = '2026.11.14-direct-send';
+export const LOCKBOX_VERSION = '2026.11.15-access-check';
 // Native MCP (Model Context Protocol) endpoint for AI agents: POST /api/ai/v1/mcp.
 // Stateless Streamable HTTP, JSON responses only. Two read-only tools over the same redacted feed
 // as the REST API, so redaction and "reviewed only" rules are identical.
@@ -104,16 +104,40 @@ export const SEND_TOOL = {
   } },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 };
+/** Always available, read-only: which key this connection uses and what it may do. No secrets, no email content. */
+export const ACCESS_TOOL = {
+  name: 'get_access', title: 'Check my access',
+  description: 'Show which Lockbox key this connection uses (name and last 4 characters), the server build, and for each mailbox whether this key can see emails, draft, send, and send without per-email approval (direct_send). Read-only; never shows secrets or email content.',
+  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+};
 /** Tools this key may use. */
 export const toolsFor = (perms = {}, drafts = null) => [
   ...(perms.read !== false ? MCP_TOOLS : []),
   ...(drafts && perms.drafts ? DRAFT_TOOLS : []),
   ...(drafts && perms.send ? [SEND_TOOL, ...APPROVAL_TOOLS] : []),
+  ACCESS_TOOL,
 ];
+/** What get_access reports. mailboxes: the owner's connected mailboxes [{ id, email, provider, caps }]. */
+export function accessReport({ perms, access = {}, mailboxes = [] }) {
+  const ids = [...new Set([...mailboxes.map(b => b.id), ...(perms?.mailboxes && perms.mailboxes !== 'all' ? Object.keys(perms.mailboxes) : [])])];
+  return {
+    build: LOCKBOX_VERSION,
+    key: access.keyName ? { name: access.keyName, last4: access.last4 || '' } : null,
+    connected_via: access.via || 'api_key', ...(access.client ? { client: access.client } : {}),
+    all_mailboxes: perms?.mailboxes === 'all',
+    mailboxes: ids.map(id => {
+      const b = mailboxes.find(x => String(x.id).toLowerCase() === String(id).toLowerCase());
+      const f = boxPerms(perms, id);
+      return { mailbox: id, email: b?.email || null, connected: !!b, see: !!f.read, draft: !!f.drafts, send: !!f.send, direct_send: canAutoSend(perms, id),
+        ...(b && b.provider !== 'imap' ? { mailbox_allows_drafts: !!b.caps?.drafts, mailbox_allows_send: !!b.caps?.send } : {}) };
+    }),
+  };
+}
 const INSTRUCTIONS = 'Access to the owner\'s Lockbox mailbox, limited by what their API key allows. Only emails the owner reviewed are shared. Text shown as [hidden: Label] was hidden by the owner: never guess or ask for it. Some keys may also create and edit drafts; sending needs the owner to approve the exact email in Lockbox unless they allowed this key to send without per-email approval for that mailbox. Creating or editing a draft never sends it. Never claim an email was sent unless send_draft returned status sent.';
 
 /** Pure JSON-RPC handling for one MCP message. Returns a response object, or null for notifications. */
-export async function handleMcpMessage(msg, { user, feedFor, perms = { read: true }, keyId = null, drafts = null, base = '' }) {
+export async function handleMcpMessage(msg, { user, feedFor, perms = { read: true }, keyId = null, drafts = null, base = '', access = {}, mailboxesFor = null }) {
   const ok = result => ({ jsonrpc: '2.0', id: msg.id, result });
   const fail = (code, message) => ({ jsonrpc: '2.0', id: msg?.id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return fail(-32600, 'Invalid request');
@@ -133,11 +157,22 @@ export async function handleMcpMessage(msg, { user, feedFor, perms = { read: tru
       const toolErr = text => ok({ content: [{ type: 'text', text }], isError: true });
       if (typeof a !== 'object' || Array.isArray(a)) return toolErr('Arguments must be an object.');
       const allowed = toolsFor(perms, drafts).map(t => t.name);
+      if (p.name === 'get_access') {
+        if (Object.keys(a).length) return toolErr(`Unknown argument: ${Object.keys(a)[0]}`);
+        let mailboxes = []; try { mailboxes = mailboxesFor ? await mailboxesFor(user) : []; } catch { mailboxes = []; }
+        const r = accessReport({ perms, access, mailboxes });
+        return ok({ content: [{ type: 'text', text: JSON.stringify(r) }], structuredContent: r });
+      }
       if ([...MCP_TOOLS, ...DRAFT_TOOLS, SEND_TOOL, ...APPROVAL_TOOLS].some(t => t.name === p.name) && !allowed.includes(p.name)) return toolErr('This API key is not allowed to use that tool. The owner can change key permissions in Lockbox → AI Access.');
       const draftCall = async (fn, keys) => {
         const extra = Object.keys(a).filter(k => !keys.includes(k));
         if (extra.length) return toolErr(`Unknown argument: ${extra[0]}`);
-        try { const r = await fn(); return ok({ content: [{ type: 'text', text: JSON.stringify(r) }], structuredContent: r }); }
+        try {
+          const r = await fn();
+          // One line per send decision so the owner can see in the server log what happened. No content, no secrets.
+          if (['send_draft', 'schedule_send'].includes(p.name)) console.log(`[lockbox] mcp ${p.name} req_${randomBytes(6).toString('hex')} key=…${access.last4 || '?'} via=${access.via || 'api_key'} mailbox=${r?.mailbox || ''} draft=${r?.draft_id || ''} v${r?.version || ''} status=${r?.status || ''} direct_send=${r?.direct_send === true}${r?.approval_reason ? ` reason=${r.approval_reason}` : ''}`);
+          return ok({ content: [{ type: 'text', text: JSON.stringify(r) }], structuredContent: r });
+        }
         catch (e) {
           // Sanitized, actionable error with a request id the owner can find in the server log.
           const request_id = 'req_' + randomBytes(6).toString('hex');
@@ -149,7 +184,7 @@ export async function handleMcpMessage(msg, { user, feedFor, perms = { read: tru
           return ok({ content: [{ type: 'text', text: `${message} [${code}, request ${request_id}]` }], structuredContent: { error }, isError: true });
         }
       };
-      const who = { user, keyId, perms };
+      const who = { user, keyId, perms, keyName: access.keyName, last4: access.last4 };
       if (p.name === 'create_draft') return draftCall(() => drafts.create(who, a), ['mailbox', 'reply_to_message_id', 'reply_all', 'to', 'cc', 'bcc', 'subject', 'body']);
       if (p.name === 'update_draft') return draftCall(() => drafts.update(who, a), ['draft_id', 'mailbox', 'to', 'cc', 'bcc', 'subject', 'body']);
       const approvalUrl = id => `${base}/api/ai/approve/${encodeURIComponent(id)}`;
@@ -190,7 +225,34 @@ export function createOAuthStore({ read, write } = {}) {
     for (const [h, t] of Object.entries(d.tokens)) if (t.exp < now) delete d.tokens[h];
     const out = await fn(d); if (write) await write(d); return out;
   }));
-  return { mutate, get: async () => load() };
+  // Last use per app since the server started (kept in memory so a call never rewrites the file).
+  return { mutate, get: async () => load(), used: new Map() };
+}
+
+/**
+ * Apps (e.g. ChatGPT) connected through app sign-in, grouped by the key they were given.
+ * identify(lbxKey) -> { user, keyId } | null. Only this owner's apps are returned.
+ */
+export async function listConnectedApps(oauth, identify, user) {
+  if (!oauth) return [];
+  const d = await oauth.get(); const apps = new Map(); const known = new Map();
+  for (const t of Object.values(d.tokens)) {
+    if ((t.kind !== 'refresh' && t.kind !== 'access') || t.exp < Date.now()) continue;
+    if (!known.has(t.key)) known.set(t.key, await identify(t.key));
+    const k = known.get(t.key); if (!k || k.user !== user) continue;
+    const id = `${k.keyId}:${t.client_id}`;
+    const prev = apps.get(id);
+    apps.set(id, { keyId: k.keyId, clientId: t.client_id, name: d.clients[t.client_id]?.client_name || 'AI app', connectedAt: new Date(Math.min(prev ? Date.parse(prev.connectedAt) : Infinity, t.at || d.clients[t.client_id]?.at || Date.now())).toISOString(), lastUsedAt: oauth.used?.get(t.client_id) || prev?.lastUsedAt || null });
+  }
+  return [...apps.values()];
+}
+/** Signs one app out of one of this owner's keys: deletes its tokens. The key itself keeps working. */
+export async function disconnectApp(oauth, identify, user, keyId, clientId) {
+  if (!oauth) return 0;
+  const d = await oauth.get(); const drop = [];
+  for (const [h, t] of Object.entries(d.tokens)) { if (t.client_id !== clientId) continue; const k = await identify(t.key); if (k && k.user === user && k.keyId === keyId) drop.push(h); }
+  if (drop.length) await oauth.mutate(db => { for (const h of drop) delete db.tokens[h]; });
+  return drop.length;
 }
 
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -216,7 +278,7 @@ const validRedirect = u => { try { const x = new URL(u); return x.protocol === '
  * MCP + OAuth routes. Returns true when the request was handled.
  * verifyKey(lbxKey) -> user|null. feedFor(user, opts) -> redacted feed. oauth: store or null to disable.
  */
-export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, oauth = null, drafts = null }) {
+export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, oauth = null, drafts = null, mailboxesFor = null }) {
   // inspectKey returns { user, keyId, perms }; without it every key is read-only.
   const who = async key => { if (inspectKey) return inspectKey(key); const user = await verifyKey(key); return user ? { user, keyId: null, perms: { read: true, drafts: false, send: false } } : null; };
   const head = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
@@ -233,11 +295,13 @@ export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, 
     token_endpoint_auth_methods_supported: ['none'], scopes_supported: ['mail.read', 'mail.draft', 'mail.send'],
   });
   const resolveUser = async bearer => {
-    if (/^lbx_/.test(bearer)) return who(bearer);
+    if (/^lbx_/.test(bearer)) { const c = await who(bearer); return c && { ...c, via: 'api_key' }; }
     if (!oauth) return null;
-    const t = (await oauth.get()).tokens[sha(bearer)];
+    const d = await oauth.get(); const t = d.tokens[sha(bearer)];
     if (!t || t.kind !== 'access' || t.exp < Date.now()) return null;
-    return who(t.key); // key deleted -> null; permissions are re-read from the key on every call
+    const c = await who(t.key); // key deleted -> null; permissions are re-read from the key on every call
+    if (c) oauth.used?.set(t.client_id, new Date().toISOString());
+    return c && { ...c, via: 'app_sign_in', client: d.clients[t.client_id]?.client_name || 'AI app' };
   };
 
   return async (req, res, url) => {
@@ -265,7 +329,7 @@ export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, 
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return true; }
       const batch = Array.isArray(body) ? body.slice(0, 20) : [body];
-      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, feedFor: async (u, o) => (await feedFor(u, o)).filter(x => can(caller.perms, x.mailbox, 'read')), drafts, base })))).filter(Boolean);
+      const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, access: { keyName: caller.keyName, last4: caller.last4, via: caller.via, client: caller.client }, mailboxesFor, feedFor: async (u, o) => (await feedFor(u, o)).filter(x => can(caller.perms, x.mailbox, 'read')), drafts, base })))).filter(Boolean);
       if (!out.length) { res.writeHead(202, head).end(); return true; }
       json(res, 200, Array.isArray(body) ? out : out[0]); return true;
     }
@@ -301,8 +365,8 @@ export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, 
       let b; try { b = parseForm(await readBody(req), req.headers['content-type']); } catch { json(res, 400, { error: 'invalid_request' }); return true; }
       const issue = (d, key, client_id) => {
         const access = rand(), refresh = rand(), now = Date.now();
-        d.tokens[sha(access)] = { kind: 'access', key, client_id, exp: now + ACCESS_TTL };
-        d.tokens[sha(refresh)] = { kind: 'refresh', key, client_id, exp: now + REFRESH_TTL };
+        d.tokens[sha(access)] = { kind: 'access', key, client_id, exp: now + ACCESS_TTL, at: now };
+        d.tokens[sha(refresh)] = { kind: 'refresh', key, client_id, exp: now + REFRESH_TTL, at: now };
         return { access_token: access, token_type: 'Bearer', expires_in: ACCESS_TTL / 1000, refresh_token: refresh, scope: 'mail.read mail.draft mail.send' };
       };
       const out = await oauth.mutate(async d => {

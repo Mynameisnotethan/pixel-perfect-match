@@ -106,3 +106,11 @@
 - [x] Open the email when any empty part of a message row is clicked, not only its text
 - [x] Keep the row's checkbox and flag controls working without opening the email
 - [x] Cover the behaviour with a test and verify clicking, back, and draft rows in the browser
+
+# Live direct send / schedule
+
+- [x] Confirm the published mail image matches source and the trusted-key path returns sent/queued with a mock Outlook
+- [x] Add read-only `get_access`, approval reasons, send-decision log lines, and Connected apps per key
+- [x] Keep direct send and mailbox permissions when saving before mailboxes load; read back and warn if the server drops it; case-insensitive mailbox ids
+- [x] Add `--access` / `--schedule-test` to scripts/check-mcp-tools.mjs and tests for both paths
+- [ ] Verify the deployed endpoint with a fresh self-addressed scheduled draft (blocked: needs redeploy and the owner's key; run the PowerShell check in docs/HOSTINGER_DEPLOY.md)

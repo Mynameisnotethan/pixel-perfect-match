@@ -18,16 +18,27 @@ export function normalizePerms(p) {
     if (f.read || f.drafts) boxes[id] = f;
   }
   const any = k => Object.values(boxes).some(b => b[k]);
-  return { mailboxes: boxes, read: any('read'), drafts: any('drafts'), send: any('send'), autoSend: autoSend.filter(id => boxes[id]?.send) };
+  return { mailboxes: boxes, read: any('read'), drafts: any('drafts'), send: any('send'), autoSend: autoSend.filter(id => entryFor(boxes, id)?.send) };
 }
+// Mailbox ids are compared without regard to letter case ("Microsoft:Me@X.com" is the same mailbox as "microsoft:me@x.com").
+const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+const entryFor = (boxes, id) => boxes[id] || Object.entries(boxes).find(([k]) => same(k, id))?.[1];
 /** What a key may do in one mailbox. */
 export function boxPerms(perms, mailboxId) {
   const p = normalizePerms(perms);
   if (p.mailboxes === 'all') return { read: p.read, drafts: p.drafts, send: p.send };
-  return p.mailboxes[mailboxId] || { read: false, drafts: false, send: false };
+  return entryFor(p.mailboxes, mailboxId) || { read: false, drafts: false, send: false };
 }
 export const can = (perms, mailboxId, what) => boxPerms(perms, mailboxId)[what] === true;
 /** True when the owner turned on "Allow sending without per-email approval" for this key and mailbox. */
-export const canAutoSend = (perms, mailboxId) => !!perms && can(perms, mailboxId, 'send') && normalizePerms(perms).autoSend.includes(mailboxId);
+export const canAutoSend = (perms, mailboxId) => !!perms && can(perms, mailboxId, 'send') && normalizePerms(perms).autoSend.some(id => same(id, mailboxId));
 /** Drop mailboxes that no longer exist (keeps 'all' untouched). */
 export const keepKnown = (perms, ids) => { const p = normalizePerms(perms); if (p.mailboxes === 'all' || !ids) return p; return normalizePerms({ mailboxes: Object.fromEntries(Object.entries(p.mailboxes).filter(([id]) => ids.includes(id))), autoSend: p.autoSend }); };
+
+/** Why sending from this mailbox still needs the owner's per-email approval, or null when it does not. */
+export function approvalReason(perms, mailboxId) {
+  if (!perms) return null;
+  if (!can(perms, mailboxId, 'send')) return 'key_cannot_send_from_mailbox';
+  if (!canAutoSend(perms, mailboxId)) return 'direct_send_off_for_key';
+  return null;
+}

@@ -17,7 +17,7 @@ import { startDeviceCode, pollDeviceCode } from '../connectors/device.mjs';
 import { setupView, applySetup } from './setup.mjs';
 import { createAuth, SESSION_COOKIE, CSRF_COOKIE } from './auth.mjs';
 import { createKeyStore, encryptedFile } from './apikeys.mjs';
-import { createOAuthStore } from '../connectors/ai-mcp.mjs';
+import { createOAuthStore, listConnectedApps, disconnectApp } from '../connectors/ai-mcp.mjs';
 import { createPrivacyStore } from './privacy-store.mjs';
 import { createAiRoutes, buildFeed } from '../connectors/ai-feed.mjs';
 import { encryptWith, decryptWith, writeAtomic } from './crypto.mjs';
@@ -135,9 +135,11 @@ const aiDrafts = createDraftService({
 });
 
 // AI agents: a personal API key maps to exactly one user; only that user's mailboxes and rules are used.
+const mcpOAuth = createOAuthStore(encryptedFile({ file: path.join(DATA_DIR, 'mcp-oauth.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) }));
 const aiRoutes = createAiRoutes({
   inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
-  oauth: createOAuthStore(encryptedFile({ file: path.join(DATA_DIR, 'mcp-oauth.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) })),
+  oauth: mcpOAuth,
+  mailboxesFor: async owner => ((await load())[owner] || []).map(b => ({ id: b.id, email: b.email, provider: b.provider, caps: aiCapabilities(b.provider, b.tokens?.scope) })),
   verifyKey: key => aiKeys.verify(key),
   feedFor: feedForOwner,
 });
@@ -273,7 +275,13 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/api/ai/keys' || url.pathname.startsWith('/api/ai/keys/')) {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       const keyId = decodeURIComponent(url.pathname.slice('/api/ai/keys/'.length) || '');
-      if (req.method === 'GET' && !keyId) return send(res, 200, await aiKeys.list(user));
+      if (req.method === 'GET' && !keyId) {
+        // Each key also lists the apps (e.g. ChatGPT) that signed in with it, so the owner can see which key an app uses.
+        const apps = await listConnectedApps(mcpOAuth, k => aiKeys.identify(k), user);
+        return send(res, 200, (await aiKeys.list(user)).map(k => ({ ...k, apps: apps.filter(a => a.keyId === k.id).map(({ keyId, ...a }) => a) })));
+      }
+      { const am = /^([A-Za-z0-9_-]{1,40})\/apps\/([A-Za-z0-9_-]{1,80})$/.exec(keyId);
+        if (am && req.method === 'DELETE') return (await disconnectApp(mcpOAuth, k => aiKeys.identify(k), user, am[1], am[2])) ? send(res, 204) : send(res, 404, { error: 'not_found' }); }
       if (req.method === 'POST' && !keyId) return send(res, 201, await aiKeys.create(user, (await readJson(req)).name));
       if (req.method === 'PATCH' && keyId) { const k = await aiKeys.setPerms(user, keyId, (await readJson(req)).perms); return k ? send(res, 200, k) : send(res, 404, { error: 'not_found' }); }
       if (req.method === 'DELETE' && keyId) return (await aiKeys.remove(user, keyId)) ? send(res, 204) : send(res, 404, { error: 'not_found' });

@@ -163,11 +163,11 @@ describe("Key permissions over MCP", () => {
     const s = await server();
     const k = await s.keys.create("owner", "agent");
     expect(k.perms).toMatchObject({ read: true, drafts: false, send: false });
-    expect(await s.tools(k.key)).toEqual(["list_messages", "get_message"]);
+    expect(await s.tools(k.key)).toEqual(["list_messages", "get_message", "get_access"]);
     expect((await s.call(k.key, "list_messages")).structuredContent.messages).toHaveLength(1);
     expect((await s.call(k.key, "create_draft", { mailbox: "google:me@x.com", to: "a@b.com", body: "x" })).isError).toBe(true);
     await s.keys.setPerms("owner", k.id, { read: true, drafts: true, send: false });
-    expect(await s.tools(k.key)).toEqual(["list_messages", "get_message", "create_draft", "update_draft", "list_drafts", "get_draft"]);
+    expect(await s.tools(k.key)).toEqual(["list_messages", "get_message", "create_draft", "update_draft", "list_drafts", "get_draft", "get_access"]);
     const made = await s.call(k.key, "create_draft", { mailbox: "google:me@x.com", to: "a@b.com", body: "x" });
     expect(made.isError).toBeFalsy();
     const send = await s.call(k.key, "send_draft", { draft_id: made.structuredContent.draft_id });

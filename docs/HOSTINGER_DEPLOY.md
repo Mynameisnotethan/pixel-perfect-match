@@ -107,3 +107,19 @@ from your repository. `LOCKBOX_IMAGE_TAG` pins a tag instead of `latest`.
 ## Connect ChatGPT
 
 ChatGPT's normal chat cannot reach your server, so use a Custom GPT Action. In AI Access, click **ChatGPT prompt** next to a key, paste it into ChatGPT, and follow the steps. The action imports `https://YOUR-DOMAIN/api/ai/v1/openapi.json`; paste the key only into the action's Authentication field (API Key, Bearer), never into chat.
+
+## Check AI sending after a redeploy
+
+1. Wait for **Docker images** on GitHub → Actions to finish, then redeploy in Hostinger → Docker Manager. Keep the `lockbox-data` volume.
+2. Lockbox → AI Access should show `Server build: 2026.11.15-access-check` or newer.
+3. Edit the key ChatGPT uses (its row lists **Connected apps: ChatGPT**). Turn on **Send emails** and **Allow sending without per-email approval** for the mailbox, then Save. If Lockbox warns the server did not keep the setting, the mail service is still an older image: redeploy again.
+4. In ChatGPT, refresh or reconnect the Lockbox connector and ask it to run `get_access`. It should list the mailbox with `direct_send: true`.
+5. Optional, from PowerShell in the project folder (the key is typed hidden and never printed):
+
+```powershell
+$env:LOCKBOX_KEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host "Lockbox key" -AsSecureString)))
+node .\scripts\check-mcp-tools.mjs --url https://YOUR-DOMAIN/api/ai/v1/mcp --access --schedule-test --to you@outlook.com
+Remove-Item Env:LOCKBOX_KEY
+```
+
+The schedule test creates a self-addressed draft, schedules it an hour ahead, expects `status=queued`, and cancels it, so nothing is sent. The draft stays in your Drafts folder. Each send or schedule decision is also logged by the mail container as `[lockbox] mcp send_draft …` / `mcp schedule_send …` lines, with the key's last 4 characters and the result, never content.

@@ -287,6 +287,8 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .key-editor-box > div { margin-top: .35rem; }
 .key-editor-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 .ai-key-summary { font-size: .85rem; margin-right: .35rem; }
+.ai-key-apps { display: block; font-size: .8rem; color: var(--bs-secondary-color, #5b6b6b); margin: .2rem 0; }
+.ai-key-app { margin-right: .6rem; }
 
 /* Drafts made by AI agents */
 .ai-drafts { margin: 0 0 12px; border: 1px solid var(--bs-border-color, #dfe6e6); border-radius: 10px; padding: 12px 14px; background: #fff; flex-basis: 100%; }

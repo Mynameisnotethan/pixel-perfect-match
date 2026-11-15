@@ -5,7 +5,7 @@
 // Shared by the Docker mail server and the desktop app.
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeOutgoing } from './outgoing.mjs';
-import { can, canAutoSend } from './ai-perms.mjs';
+import { can, canAutoSend, approvalReason } from './ai-perms.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 const err = (message, status = 400, code = undefined) => Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
@@ -59,6 +59,15 @@ function aiPreview(d) {
     approved_for_sending: !!d.approval && d.approval.hash === d.hash,
     ...storageOf(d), ...scheduleOf(d),
   };
+}
+/** Tells the agent (and the owner reading its reply) why this email still needs a per-email approval. */
+export function whyApproval(who, mailbox) {
+  const reason = approvalReason(who?.perms, mailbox);
+  if (!reason) return {};
+  const key = who.keyName ? `key "${who.keyName}" (…${who.last4 || ''})` : 'this key';
+  return { direct_send: false, approval_reason: reason, approval_reason_text: reason === 'direct_send_off_for_key'
+    ? `Sending without per-email approval is off for ${key} on ${mailbox}. The owner can turn it on in Lockbox → AI Access → Edit.`
+    : `${key} is not allowed to send from ${mailbox}.` };
 }
 const withDirect = (who, p) => ({ ...p, direct_send: canAutoSend(who.perms, p.mailbox) });
 /** What the owner is shown on the approval page: the real, complete content. */
@@ -213,7 +222,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       if (confirm) { try { approved = await confirm(ownerPreview(d)); } catch { approved = false; } }
       if (approved) await approve(who.user, d.id, d.hash);
       else if (scheduled) return { ...aiPreview(d), status: 'approval_required' };
-      else return { ...aiPreview(d), status: 'approval_required', approval_url: approvalUrl(d.id), message: confirm ? 'The owner did not approve this version in Lockbox. Nothing was sent.' : 'Nothing was sent. Ask the owner to open approval_url, check the exact email and approve it, then call send_draft again.' };
+      else return { ...aiPreview(d), ...whyApproval(who, d.mailbox), status: 'approval_required', approval_url: approvalUrl(d.id), message: confirm ? 'The owner did not approve this version in Lockbox. Nothing was sent.' : 'Nothing was sent. Ask the owner to open approval_url, check the exact email and approve it, then call send_draft again.' };
     }
     // Claim this version for sending inside the queue, so parallel calls cannot both send.
     const claim = await mutate(db => {
@@ -222,7 +231,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       if (x.send && x.send.hash === x.hash) return { stop: x.send.status, d: structuredClone(x) };
       x.send = { hash: x.hash, status: 'sending', at: new Date().toISOString() }; return { d: structuredClone(x) };
     });
-    if (claim.stop === 'approval_required') return { ...aiPreview(claim.d), status: 'approval_required', approval_url: approvalUrl(claim.d.id) };
+    if (claim.stop === 'approval_required') return { ...aiPreview(claim.d), ...whyApproval(who, claim.d.mailbox), status: 'approval_required', approval_url: approvalUrl(claim.d.id) };
     if (claim.stop) return { ...aiPreview(claim.d), status: claim.stop === 'sent' ? 'sent' : claim.stop === 'sending' ? 'sending' : 'send_status_unknown', provider_message_id: claim.d.send?.messageId || null, message: 'Another request is already sending this draft. It was not sent twice.' };
     try {
       const r = await withMailbox(who.user, claim.d.mailbox, async (api, box) => { allowBox(who, box.id, 'send'); needCaps(box, 'send'); return api.sendDraft(claim.d.providerDraftId); });
@@ -275,7 +284,7 @@ export function createDraftService({ read, write, withMailbox, feedFor, confirm 
       if (ok) { await approve(who.user, d.id, d.hash); return { ...aiPreview({ ...d, approval: { hash: d.hash } }), message: 'The owner approved this version. Nothing was sent yet.' }; }
       return { ...aiPreview(d), message: 'The owner did not approve this version. Nothing was sent.' };
     }
-    return { ...aiPreview(d), approval_url: approvalUrl(d.id), message: 'Nothing was sent. Ask the owner to open approval_url and approve this exact version.' };
+    return { ...aiPreview(d), ...whyApproval(who, d.mailbox), approval_url: approvalUrl(d.id), message: 'Nothing was sent. Ask the owner to open approval_url and approve this exact version.' };
   }
 
   /** Sets or replaces the send time. The time is part of the approved content, so this always needs a new approval. */

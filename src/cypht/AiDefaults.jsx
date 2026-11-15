@@ -16,7 +16,7 @@ export default function AiDefaults({ value, onSave, onNotify }) {
   };
   const row = (k, label, isSent) => <label key={k} className="form-check form-switch ai-default-row"><input className="form-check-input" type="checkbox" role="switch" disabled={!draft} aria-label={isSent ? `Hide ${label} on sent emails` : undefined} checked={!!(isSent ? d.sent?.[k] : d[k])} onChange={e => change(k, e.target.checked, isSent)} /><span className="form-check-label">{label}</span></label>;
   return <>
-    <div className="ai-card-head"><div><h2>Hide by default</h2><p className="muted-copy">Applies to every email unless you unlock that part on a specific email. Changes save automatically.</p></div>
+    <div className="ai-card-head"><div><h2>Hide by default</h2></div>
       {!draft ? <button className="btn btn-sm btn-outline-secondary" onClick={() => { setWord(''); setAsking(true); }}><i className="bi bi-lock-fill" aria-hidden="true" /> Change settings</button>
         : <button className="btn btn-sm btn-outline-secondary" onClick={() => { setDraft(null); onNotify?.('Hide-by-default settings saved.'); }}>Done</button>}
     </div>

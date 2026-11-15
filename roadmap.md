@@ -101,6 +101,8 @@
 
 # Message list interaction
 
+- [x] Move the scheduled email's waiting-for-approval notice to the bottom beside Reply and Forward; verify its cancel action.
+
 - [x] Open the email when any empty part of a message row is clicked, not only its text
 - [x] Keep the row's checkbox and flag controls working without opening the email
 - [x] Cover the behaviour with a test and verify clicking, back, and draft rows in the browser

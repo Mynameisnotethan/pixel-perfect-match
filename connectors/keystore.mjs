@@ -25,6 +25,8 @@ export function createKeyStore({ read, write }) {
     remove: (user, id) => mutate(db => { const before = (db[user] || []).length; db[user] = (db[user] || []).filter(k => k.id !== id); return db[user].length < before; }),
     /** Changes what one of this user's keys may do. Returns the updated key, or null when it is not theirs. */
     setPerms: (user, id, perms) => mutate(db => { const k = (db[user] || []).find(x => x.id === id); if (!k) return null; k.perms = normalizePerms(perms); return view(k); }),
+    /** Records that an AI app successfully reached a tool with this key (tool name only, never content). */
+    noteTool: (user, id, tool) => mutate(db => { const k = (db[user] || []).find(x => x.id === id); if (k) { k.lastToolCallAt = new Date().toISOString(); k.lastToolName = String(tool || '').slice(0, 40); } }),
     /** Like verify, but also returns which key it was and what it may do. */
     inspect: key => {
       if (!/^lbx_[A-Za-z0-9_-]{20,}$/.test(String(key || ''))) return Promise.resolve(null);

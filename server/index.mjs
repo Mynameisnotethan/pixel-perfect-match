@@ -137,7 +137,7 @@ const aiDrafts = createDraftService({
 // AI agents: a personal API key maps to exactly one user; only that user's mailboxes and rules are used.
 const mcpOAuth = createOAuthStore(encryptedFile({ file: path.join(DATA_DIR, 'mcp-oauth.enc'), encrypt: (...a) => encrypt(...a), decrypt: (...a) => decrypt(...a) }));
 const aiRoutes = createAiRoutes({
-  inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
+  inspectKey: key => aiKeys.inspect(key), noteTool: (u, id, t) => aiKeys.noteTool(u, id, t), drafts: aiDrafts,
   oauth: mcpOAuth,
   mailboxesFor: async owner => ((await load())[owner] || []).map(b => ({ id: b.id, email: b.email, provider: b.provider, caps: aiCapabilities(b.provider, b.tokens?.scope) })),
   verifyKey: key => aiKeys.verify(key),
@@ -265,7 +265,7 @@ http.createServer(async (req, res) => {
       try { return html(200, approvedPage(await aiDrafts.approve(user, m[1], String(form.hash || '')))); }
       catch (e) { if (e.status === 409) return html(409, approvePage(await aiDrafts.ownerView(user, m[1]), session.csrf, e.message)); throw e; }
     }
-    if (url.pathname === '/api/ai/version' && req.method === 'GET') { if (!user) return send(res, 401, { error: 'sign_in_required' }); return send(res, 200, { version: LOCKBOX_VERSION }); }
+    if (url.pathname === '/api/ai/version' && req.method === 'GET') { if (!user) return send(res, 401, { error: 'sign_in_required' }); return send(res, 200, { version: LOCKBOX_VERSION, publicUrl: publicUrl() }); }
     if (url.pathname === '/api/ai/drafts' && req.method === 'GET') {
       if (!user) return send(res, 401, { error: 'sign_in_required' });
       return send(res, 200, await aiDrafts.ownerList(user));

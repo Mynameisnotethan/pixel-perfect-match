@@ -278,7 +278,7 @@ const validRedirect = u => { try { const x = new URL(u); return x.protocol === '
  * MCP + OAuth routes. Returns true when the request was handled.
  * verifyKey(lbxKey) -> user|null. feedFor(user, opts) -> redacted feed. oauth: store or null to disable.
  */
-export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, oauth = null, drafts = null, mailboxesFor = null }) {
+export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, oauth = null, drafts = null, mailboxesFor = null, noteTool = null }) {
   // inspectKey returns { user, keyId, perms }; without it every key is read-only.
   const who = async key => { if (inspectKey) return inspectKey(key); const user = await verifyKey(key); return user ? { user, keyId: null, perms: { read: true, drafts: false, send: false } } : null; };
   const head = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
@@ -330,6 +330,9 @@ export function createMcpRoutes({ verifyKey, inspectKey = null, feedFor, limit, 
       try { body = JSON.parse(await readBody(req)); } catch { json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return true; }
       const batch = Array.isArray(body) ? body.slice(0, 20) : [body];
       const out = (await Promise.all(batch.map(m => handleMcpMessage(m, { user, perms: caller.perms, keyId: caller.keyId, access: { keyName: caller.keyName, last4: caller.last4, via: caller.via, client: caller.client }, mailboxesFor, feedFor: async (u, o) => (await feedFor(u, o)).filter(x => can(caller.perms, x.mailbox, 'read')), drafts, base })))).filter(Boolean);
+      // Server-observed evidence for the Connect an Agent wizard: a tool call that succeeded.
+      const called = batch.find((m, i) => m?.method === 'tools/call' && out.find(o => o.id === m.id && o.result && !o.result.isError));
+      if (called && noteTool && caller.keyId) { try { await noteTool(user, caller.keyId, called.params?.name); } catch {} }
       if (!out.length) { res.writeHead(202, head).end(); return true; }
       json(res, 200, Array.isArray(body) ? out : out[0]); return true;
     }

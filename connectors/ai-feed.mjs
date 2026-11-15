@@ -38,8 +38,8 @@ export function createLimiter(max = 60, windowMs = 60_000) {
  * Handles GET /api/ai/v1/messages and /api/ai/v1/messages/:id. Returns false for other paths.
  * feedFor(user, { mailbox }) must return buildFeed() output for that user only.
  */
-export function createAiRoutes({ verifyKey, inspectKey = null, feedFor, limit = createLimiter(), oauth = null, drafts = null, mailboxesFor = null }) {
-  const mcp = createMcpRoutes({ verifyKey, inspectKey, feedFor, limit, oauth, drafts, mailboxesFor });
+export function createAiRoutes({ verifyKey, inspectKey = null, feedFor, limit = createLimiter(), oauth = null, drafts = null, mailboxesFor = null, noteTool = null }) {
+  const mcp = createMcpRoutes({ verifyKey, inspectKey, feedFor, limit, oauth, drafts, mailboxesFor, noteTool });
   const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
   return async (req, res, url) => {
     if (await mcp(req, res, url)) return true;

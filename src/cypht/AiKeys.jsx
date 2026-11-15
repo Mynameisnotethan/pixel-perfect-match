@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { liveBridge } from './mailbox-live.js';
+import AgentWizard from './AgentWizard.jsx';
 import { buildChatGptPrompt, buildMcpSetup } from './ai-prompt.js';
 import { READ_ONLY, normalizePerms } from '../../connectors/ai-perms.mjs';
 export { READ_ONLY, normalizePerms };
@@ -74,7 +75,9 @@ const store = () => liveBridge()?.aiKeys || demoKeys;
 const day = d => d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Never';
 const Icon = ({ name }) => <i className={`bi bi-${name}`} aria-hidden="true" />;
 
-export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnect }) {
+export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnect, onAddMailbox }) {
+  const [wizard, setWizard] = useState(false);
+  const [publicUrl, setPublicUrl] = useState('');
   const [editing, setEditing] = useState(null);
   const [keys, setKeys] = useState([]);
   const [creating, setCreating] = useState(false);
@@ -85,7 +88,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
   const refresh = () => store().list().then(setKeys).catch(e => setError(e.message));
   const [endpoint, setEndpoint] = useState('');
   const [build, setBuild] = useState('');
-  useEffect(() => { refresh(); const b = liveBridge(); if (b?.aiEndpoint) Promise.resolve(b.aiEndpoint()).then(setEndpoint).catch(() => {}); if (b?.aiVersion) Promise.resolve(b.aiVersion()).then(v => setBuild(v?.version || ''), () => setBuild('older build (no direct send)')); }, []);
+  useEffect(() => { refresh(); const b = liveBridge(); if (b?.aiEndpoint) Promise.resolve(b.aiEndpoint()).then(setEndpoint).catch(() => {}); if (b?.aiVersion) Promise.resolve(b.aiVersion()).then(v => { setBuild(v?.version || ''); if (v?.publicUrl) setPublicUrl(v.publicUrl); }, () => setBuild('older build (no direct send)')); }, []);
   const create = async e => {
     e.preventDefault(); setError('');
     try { const k = await store().create(name); setFresh(k); setName(''); setCreating(false); refresh(); } catch (err) { setError(err.message === 'name_required' ? 'Give the key a name.' : err.message); }
@@ -112,7 +115,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
   };
   return <div className="ai-keys">
     <div className="ai-card-head"><div><h2>API keys {!!keys.length && <span className="ai-key-count">{keys.length}</span>}</h2><p className="muted-copy">Keys belong to your account only. Give each AI agent its own key so you can remove one without affecting the others.{demo && ' Demo: kept in this browser.'}</p></div>
-      {!creating && <button className="btn btn-primary btn-sm" onClick={() => { setCreating(true); setFresh(null); }}><Icon name="plus-lg" /> Create API key</button>}</div>
+      <div className="ai-key-head-actions"><button className="btn btn-primary btn-sm" onClick={() => setWizard(true)}><Icon name="plug" /> Connect an Agent</button>{!creating && <button className="btn btn-outline-primary btn-sm" onClick={() => { setCreating(true); setFresh(null); }}><Icon name="plus-lg" /> Create API key</button>}</div></div>
     {build && <p className="ai-build"><span className="ai-chip"><Icon name="hdd-network" /> Server build <code>{build}</code></span></p>}
     {creating && <form className="ai-key-form" onSubmit={create}><input className="form-control form-control-sm" autoFocus maxLength={60} placeholder="Key name, e.g. Claude agent" aria-label="Key name" value={name} onChange={e => setName(e.target.value)} /><button className="btn btn-primary btn-sm" type="submit">Create</button><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => { setCreating(false); setName(''); }}>Cancel</button></form>}
     {fresh && <div className="ai-key-fresh" role="status"><strong><Icon name="exclamation-triangle" /> Copy “{fresh.name}” now. You won't see it again.</strong><div className="ai-key-copy"><code>{fresh.key}</code><button className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(fresh.key); onNotify('API key copied.'); }}><Icon name="clipboard" /> Copy</button><button className="btn btn-sm btn-link" onClick={() => setFresh(null)}>Done</button></div></div>}
@@ -134,6 +137,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
       </div>
     </li>; })}</ul>
       : <div className="ai-key-empty"><Icon name="key" /><p>No API keys yet.</p>{!creating && <button className="btn btn-primary btn-sm" onClick={() => { setCreating(true); setFresh(null); }}><Icon name="plus-lg" /> Create API key</button>}</div>}
+    {wizard && <AgentWizard store={store()} keys={keys} refreshKeys={refresh} endpoint={endpoint} publicUrl={publicUrl} mailboxes={mailboxes} onNotify={onNotify} onReconnect={onReconnect} onAddMailbox={() => { setWizard(false); onAddMailbox?.(); }} onClose={() => setWizard(false)} />}
     {editing && <KeyEditor k={editing} mailboxes={mailboxes} onCancel={() => setEditing(null)} onSave={next => savePerms(editing, next)} onReconnect={onReconnect} />}
   </div>;
 }

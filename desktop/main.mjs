@@ -156,12 +156,12 @@ const aiDrafts = createDraftService({
   withMailbox: async (_owner, id, fn) => { const scope = (await tokensFor(id))?.scope; return withToken(id, (t, b) => fn(b.provider === 'imap' ? null : bind(b.provider, t), { ...b, caps: aiCapabilities(b.provider, scope) })); },
 });
 on('aiDrafts:list', () => aiDrafts.ownerList(LOCAL_USER));
-on('ai:version', () => ({ version: LOCKBOX_VERSION }));
+on('ai:version', () => ({ version: LOCKBOX_VERSION, publicUrl: aiEndpoint.replace(/\/api\/ai\/v1$/, '') }));
 on('aiDrafts:cancel', id => aiDrafts.ownerCancel(LOCAL_USER, String(id)));
 // Scheduled sends run only while the desktop app is open; missed ones go out the next time it starts.
 setInterval(() => aiDrafts.runDue().catch(e => console.error(`[lockbox] scheduled sends: ${e.message}`)), 30_000);
 const aiRoutes = createAiRoutes({
-  verifyKey: key => aiKeys.verify(key), inspectKey: key => aiKeys.inspect(key), drafts: aiDrafts,
+  verifyKey: key => aiKeys.verify(key), inspectKey: key => aiKeys.inspect(key), noteTool: (u, id, t) => aiKeys.noteTool(u, id, t), drafts: aiDrafts,
   feedFor: feedLocal,
   mailboxesFor: async () => Promise.all((await readIndex()).map(async b => ({ id: b.id, email: b.email, provider: b.provider, caps: aiCapabilities(b.provider, (await tokensFor(b.id))?.scope) }))),
 });

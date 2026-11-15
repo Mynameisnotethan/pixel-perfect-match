@@ -97,7 +97,7 @@ export default function AgentWizard({ store, keys, refreshKeys, endpoint, public
       </>;
       case 3: return <>
         <h3 tabIndex={-1}>Set up {prov.name}</h3>
-        {url && <div className="aw-field"><label>MCP URL (Server URL)</label><div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div><p className="muted-copy">Use this address if {prov.name} asks for an MCP, server or connector URL.</p></div>}
+        {url && st.provider !== 'claude' && <div className="aw-field"><label>MCP URL (Server URL)</label><div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div><p className="muted-copy">Use this address if {prov.name} asks for an MCP, server or connector URL.</p></div>}
         {st.provider === 'chatgpt' && <><ol className="aw-steps">
           <li>On ChatGPT on the web, open <strong>Plugins</strong>, select <strong>+</strong>, then <strong>Add custom MCP server</strong>. If you don't see it, your plan or workspace admin hasn't enabled custom servers.</li>
           <li>Name it <code>Lockbox</code> and paste the MCP URL as the Server URL. {url && <Copy text={url} label="Copy MCP URL" onNotify={onNotify} />}</li>
@@ -107,7 +107,7 @@ export default function AgentWizard({ store, keys, refreshKeys, endpoint, public
           <details className="aw-more"><summary>Using a client with Bearer-key settings instead</summary><p>Add a remote (Streamable HTTP) server with the MCP URL and header <code>Authorization: Bearer &lt;your lbx_ key&gt;</code>. If a field asks for an <em>environment variable</em>, type the variable's name (for example <code>LOCKBOX_KEY</code>) and set that variable to your key. If it asks for a <em>token</em>, paste the key itself.</p><div className="ai-key-copy"><code>{bearerConfig(url)}</code><Copy text={bearerConfig(url)} label="Copy config" onNotify={onNotify} /></div></details></>}
         {st.provider === 'claude' && <ol className="aw-steps">
           <li>In Claude, open <strong>Settings → Connectors</strong> and choose <strong>Add custom connector</strong>. On Team or Enterprise plans, an owner adds it first in organization settings; members then connect it.</li>
-          <li>Name it <code>Lockbox</code> and paste the MCP URL. {url && <Copy text={url} label="Copy MCP URL" onNotify={onNotify} />}</li>
+          <li>Name it <code>Lockbox</code> and paste this MCP URL:{url && <div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div>}</li>
           <li>Under advanced settings, leave the OAuth client ID empty or choose <strong>Register automatically</strong> if it appears — Lockbox supports automatic registration.</li>
           <li>Select <strong>Connect</strong>. On the Lockbox page that opens, paste your Lockbox key and select <strong>Allow</strong>.</li>
           <li>In a chat, enable Lockbox from the tools/connectors menu.</li></ol>}

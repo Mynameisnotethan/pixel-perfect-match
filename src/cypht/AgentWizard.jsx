@@ -155,8 +155,8 @@ export default function AgentWizard({ store, keys, refreshKeys, endpoint, public
   const next = () => st.step === 1 ? saveAccess() : set({ step: st.step + 1 });
   return <div className="modal-backdrop-lite" role="presentation" onKeyDown={e => e.key === 'Escape' && close()}>
     <div className="agent-wizard" role="dialog" aria-modal="true" aria-labelledby="aw-title" ref={dialog}>
-      <div className="aw-head"><h2 id="aw-title"><Icon name="plug" /> Connect an Agent</h2><button type="button" className="btn-close" aria-label="Close" onClick={close} /></div>
-      <ol className="aw-progress" aria-label="Progress">{STEPS.map((s, i) => <li key={s} className={i === st.step ? 'is-now' : i < st.step ? 'is-done' : ''} aria-current={i === st.step ? 'step' : undefined}><span>{i + 1}</span><em>{s}</em></li>)}</ol>
+      <div className="aw-head"><div><h2 id="aw-title"><Icon name="plug" /> Connect an Agent</h2><p className="aw-sub">Step {Math.min(st.step, STEPS.length - 1) + 1} of {STEPS.length} · {STEPS[Math.min(st.step, STEPS.length - 1)]}</p></div><button type="button" className="btn-close" aria-label="Close" onClick={close} /></div>
+      <ol className="aw-progress" aria-label="Progress">{STEPS.map((s, i) => <li key={s} className={i === st.step ? 'is-now' : i < st.step ? 'is-done' : ''} aria-current={i === st.step ? 'step' : undefined}><span>{i < st.step ? <Icon name="check" /> : i + 1}</span><em>{s}</em></li>)}</ol>
       <div className="aw-body">{body()}</div>
       <div className="aw-foot">
         {st.step > 0 && st.step < 6 && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => set({ step: st.step - 1 })}>Back</button>}

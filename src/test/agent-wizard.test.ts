@@ -9,10 +9,10 @@ describe('Connect an Agent wizard', () => {
     expect(mcpUrlFrom('')).toBe('');
   });
   it('only offers send and schedule prompts when the key can send', () => {
-    expect(tryPrompts({ mailboxes: 'all', read: true }).map(p => p.id)).toEqual(['list']);
-    expect(tryPrompts({ mailboxes: 'all', read: true, drafts: true }).map(p => p.id)).toEqual(['list', 'draft']);
-    expect(tryPrompts({ mailboxes: 'all', read: true, send: true }).map(p => p.id)).toEqual(['list']); // send needs drafts
-    expect(tryPrompts({ mailboxes: 'all', read: true, drafts: true, send: true }).map(p => p.id)).toEqual(['list', 'draft', 'send', 'schedule']);
+    expect(tryPrompts({ mailboxes: 'all', read: true }).map((p: any) => p.id)).toEqual(['list']);
+    expect(tryPrompts({ mailboxes: 'all', read: true, drafts: true }).map((p: any) => p.id)).toEqual(['list', 'draft']);
+    expect(tryPrompts({ mailboxes: 'all', read: true, send: true }).map((p: any) => p.id)).toEqual(['list']); // send needs drafts
+    expect(tryPrompts({ mailboxes: 'all', read: true, drafts: true, send: true }).map((p: any) => p.id)).toEqual(['list', 'draft', 'send', 'schedule']);
   });
   it('marks verification only from activity the server recorded after the wizard opened', () => {
     const since = Date.parse('2026-11-15T00:00:00Z');

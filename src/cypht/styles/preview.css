@@ -205,9 +205,6 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 
 /* AI Access page */
 .ai-page { max-width: 860px; display: grid; gap: 16px; }
-.ai-tabs { display: flex; flex-wrap: wrap; gap: 6px; position: sticky; top: 0; z-index: 2; padding: 6px 0; background: var(--bs-body-bg, #fff); }
-.ai-tabs a { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--bs-border-color, #ddd); font-size: .85rem; text-decoration: none; color: inherit; }
-.ai-tabs a:hover { border-color: #0f766e; color: #0f766e; }
 .ai-card { border: 1px solid var(--bs-border-color, #ddd); border-radius: 10px; padding: 16px 18px; scroll-margin-top: 48px; }
 .ai-card h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .ai-card .muted-copy { margin-bottom: 12px; }

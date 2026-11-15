@@ -89,7 +89,7 @@ export default function AgentWizard({ store, keys, refreshKeys, endpoint, public
       </>;
       case 2: return <>
         <h3 tabIndex={-1}>Copy connection details</h3>
-        {url ? <div className="aw-field"><label>MCP URL</label><div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div>{isLocalUrl(url) && <p className="aw-warn">This address only works on this computer while Lockbox is open. {st.provider !== 'grok' && `${prov.name} connects from the internet, so use Lockbox on your server instead.`}</p>}</div>
+        {url ? <div className="aw-field"><label>MCP URL (Server URL)</label><div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div>{isLocalUrl(url) && <p className="aw-warn">This address only works on this computer while Lockbox is open. {st.provider !== 'grok' && `${prov.name} connects from the internet, so use Lockbox on your server instead.`}</p>}</div>
           : <p className="aw-note"><Icon name="info-circle" /> Demo: there's no server address yet. Run Lockbox on your server to get one.</p>}
         {secret ? <div className="ai-key-fresh"><strong><Icon name="exclamation-triangle" /> Copy your “{key?.name}” key now. You won't see it again.</strong><div className="ai-key-copy"><code>{secret}</code><Copy text={secret} label="Copy API key" onNotify={onNotify} done="API key copied. Paste it only where the next step says." /></div>
           <p className="muted-copy">{st.provider === 'grok' ? 'Store it as the LOCKBOX_KEY environment variable of your app.' : 'Paste it only on the Lockbox sign-in page that opens when you connect — never into a chat.'}</p></div>
@@ -97,6 +97,7 @@ export default function AgentWizard({ store, keys, refreshKeys, endpoint, public
       </>;
       case 3: return <>
         <h3 tabIndex={-1}>Set up {prov.name}</h3>
+        {url && <div className="aw-field"><label>MCP URL (Server URL)</label><div className="ai-key-copy"><code>{url}</code><Copy text={url} label="Copy MCP URL" onNotify={onNotify} /></div><p className="muted-copy">Use this address if {prov.name} asks for an MCP, server or connector URL.</p></div>}
         {st.provider === 'chatgpt' && <><ol className="aw-steps">
           <li>On ChatGPT on the web, open <strong>Plugins</strong>, select <strong>+</strong>, then <strong>Add custom MCP server</strong>. If you don't see it, your plan or workspace admin hasn't enabled custom servers.</li>
           <li>Name it <code>Lockbox</code> and paste the MCP URL as the Server URL. {url && <Copy text={url} label="Copy MCP URL" onNotify={onNotify} />}</li>

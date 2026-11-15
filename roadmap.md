@@ -114,3 +114,7 @@
 - [x] Keep direct send and mailbox permissions when saving before mailboxes load; read back and warn if the server drops it; case-insensitive mailbox ids
 - [x] Add `--access` / `--schedule-test` to scripts/check-mcp-tools.mjs and tests for both paths
 - [ ] Verify the deployed endpoint with a fresh self-addressed scheduled draft (blocked: needs redeploy and the owner's key; run the PowerShell check in docs/HOSTINGER_DEPLOY.md)
+
+# All-mailboxes direct sending
+
+- [x] Replace individual direct-send checkboxes in All mailboxes mode with one explicit opt-in for current and future mailboxes; verify server/desktop permissions and editor persistence (195 tests passed; browser save/reopen passed; Hostinger requires redeploy).

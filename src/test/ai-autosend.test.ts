@@ -14,6 +14,24 @@ const trusted = { user: "u", keyId: "k", perms: { mailboxes: send, autoSend: [BO
 const normal = { user: "u", keyId: "k", perms: { mailboxes: send } };
 
 describe("send without per-email approval", () => {
+  it("all-mailboxes opt-in covers current and future mailboxes", () => {
+    const p = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: ['*'] };
+    expect(canAutoSend(p, BOX)).toBe(true);
+    expect(canAutoSend(p, 'google:new@gmail.com')).toBe(true);
+    expect(canAutoSend({ ...p, send: false }, BOX)).toBe(false);
+    expect(canAutoSend({ ...p, autoSend: [] }, BOX)).toBe(false);
+  });
+  it("switching to selected mailboxes cannot authorize unlisted mailboxes", () => {
+    const p = normalizePerms({ mailboxes: send, autoSend: ['*'] });
+    expect(p.autoSend).toEqual([BOX]);
+    expect(canAutoSend(p, BOX)).toBe(true);
+    expect(canAutoSend(p, 'google:other@gmail.com')).toBe(false);
+  });
+  it("does not expand existing mailbox-specific consent to all mailboxes", () => {
+    const p = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: [BOX] };
+    expect(canAutoSend(p, BOX)).toBe(true);
+    expect(canAutoSend(p, 'google:new@gmail.com')).toBe(false);
+  });
   it("is off unless the mailbox is listed, and needs Send email", () => {
     expect(normalizePerms({ mailboxes: send }).autoSend).toEqual([]);
     expect(normalizePerms(undefined).autoSend).toEqual([]);

@@ -1,9 +1,9 @@
 // @ts-nocheck
 // The live ChatGPT path end to end with a mock Outlook: API key or app sign-in -> MCP -> send/schedule.
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import React from "react";
 import { createAiRoutes, createLimiter } from "../../connectors/ai-feed.mjs";
 import { createKeyStore } from "../../connectors/keystore.mjs";
@@ -16,6 +16,8 @@ import { checkAccess, scheduleTest } from "../../scripts/check-mcp-tools.mjs";
 const BOX = "microsoft:ethenry1982@outlook.com";
 const ME = "ethenry1982@outlook.com";
 const TRUSTED = { mailboxes: { [BOX]: { read: true, drafts: true, send: true } }, autoSend: [BOX] };
+const ALL_TRUSTED = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: ['*'] };
+afterEach(cleanup);
 const sha = s => createHash("sha256").update(String(s)).digest("hex");
 
 async function setup() {
@@ -43,7 +45,7 @@ describe("direct send over the live MCP path", () => {
     it(`send_draft returns sent once and schedule_send returns queued (${via})`, async () => {
       const s = await setup();
       const k = await s.keys.create("owner", "ChatGPT");
-      await s.keys.setPerms("owner", k.id, TRUSTED);
+      await s.keys.setPerms("owner", k.id, ALL_TRUSTED);
       const token = via === "api_key" ? k.key : await s.appToken(k.key);
 
       const d = (await s.call(token, "create_draft", { mailbox: BOX, to: [ME], subject: "Lockbox immediate send test", body: "hi" })).structuredContent;
@@ -121,6 +123,16 @@ describe("live check script", () => {
 });
 
 describe("the setting sticks", () => {
+  it("saves one all-mailboxes direct-send opt-in even before mailboxes load", async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onSave = vi.fn(async () => {});
+    render(React.createElement(KeyEditor, { k: { id: 'k', name: 'ChatGPT', perms: { ...ALL_TRUSTED, autoSend: [] } }, mailboxes: [], onSave, onCancel: () => {} }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Allow sending without per-email approval', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0]).toEqual(ALL_TRUSTED);
+    expect(canAutoSend(onSave.mock.calls[0][0], 'google:added-later@gmail.com')).toBe(true);
+  });
   it("mailbox ids match regardless of letter case", () => {
     expect(canAutoSend({ mailboxes: { "Microsoft:EtHenry1982@Outlook.com": { read: true, drafts: true, send: true } }, autoSend: ["microsoft:ethenry1982@outlook.com"] }, BOX)).toBe(true);
   });

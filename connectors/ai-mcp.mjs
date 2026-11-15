@@ -1,6 +1,6 @@
 import { can, boxPerms, canAutoSend } from './ai-perms.mjs';
 /** Build marker shown in MCP initialize, so the owner can tell which code a server runs. Bump when MCP behaviour changes. */
-export const LOCKBOX_VERSION = '2026.11.15-access-check';
+export const LOCKBOX_VERSION = '2026.11.15-all-mailbox-send';
 // Native MCP (Model Context Protocol) endpoint for AI agents: POST /api/ai/v1/mcp.
 // Stateless Streamable HTTP, JSON responses only. Two read-only tools over the same redacted feed
 // as the REST API, so redaction and "reviewed only" rules are identical.

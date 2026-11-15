@@ -8,6 +8,8 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: path.join(dir, 'renderer'),
   base: './',
+  // Ship the logo and other files from the website's public folder inside the installer too.
+  publicDir: path.join(dir, '..', 'public'),
   plugins: [react()],
   resolve: { alias: { '@': path.join(dir, '..', 'src') } },
   build: { outDir: path.join(dir, 'renderer-dist'), emptyOutDir: true },

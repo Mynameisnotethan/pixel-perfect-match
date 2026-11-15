@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { liveBridge } from './mailbox-live.js';
 import AgentWizard from './AgentWizard.jsx';
-import { buildChatGptPrompt, buildMcpSetup } from './ai-prompt.js';
 import { READ_ONLY, normalizePerms } from '../../connectors/ai-perms.mjs';
 export { READ_ONLY, normalizePerms };
 
@@ -129,8 +128,6 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
       </div>
       <div className="ai-key-actions">
         <button className="btn btn-sm btn-outline-primary" aria-label={`Edit ${k.name}`} onClick={() => setEditing(k)}><Icon name="pencil" /> Edit</button>
-        {endpoint && <button className="btn btn-sm btn-outline-secondary" title="Copy a setup prompt for ChatGPT or other agents (does not include the key)" aria-label={`Copy ChatGPT prompt for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildChatGptPrompt({ endpoint, keyName: k.name })); onNotify('ChatGPT prompt copied. Paste the key only into the GPT’s Authentication field.'); }}><Icon name="chat-left-text" /> ChatGPT prompt</button>}
-        {endpoint && <button className="btn btn-sm btn-outline-secondary" title="Copy the MCP address and setup steps for ChatGPT, Claude or Cursor (does not include the key)" aria-label={`Copy MCP setup for ${k.name}`} onClick={() => { navigator.clipboard?.writeText(buildMcpSetup({ endpoint, keyName: k.name })); onNotify('MCP setup copied. Paste the key only into the app’s sign-in or settings, never a chat.'); }}><Icon name="plug" /> MCP setup</button>}
         <button className="btn btn-sm btn-outline-danger ai-key-delete" aria-label={`Delete ${k.name}`} title="Delete key" onClick={() => remove(k)}><Icon name="trash" /></button>
       </div>
     </li>; })}</ul>

@@ -114,7 +114,7 @@ export default function AiKeys({ onNotify = () => {}, mailboxes = [], onReconnec
     try { await store().remove(k.id); if (fresh?.id === k.id) setFresh(null); refresh(); onNotify('API key deleted.'); } catch (err) { setError(err.message); }
   };
   return <div className="ai-keys">
-    <div className="ai-card-head"><div><h2>API keys {!!keys.length && <span className="ai-key-count">{keys.length}</span>}</h2><p className="muted-copy">Keys belong to your account only. Give each AI agent its own key so you can remove one without affecting the others.{demo && ' Demo: kept in this browser.'}</p></div>
+    <div className="ai-card-head"><div><h2>API keys {!!keys.length && <span className="ai-key-count">{keys.length}</span>}</h2></div>
       <div className="ai-key-head-actions"><button className="btn btn-primary btn-sm" onClick={() => setWizard(true)}><Icon name="plug" /> Connect an Agent</button>{!creating && <button className="btn btn-outline-primary btn-sm" onClick={() => { setCreating(true); setFresh(null); }}><Icon name="plus-lg" /> Create API key</button>}</div></div>
     {build && <p className="ai-build"><span className="ai-chip"><Icon name="hdd-network" /> Server build <code>{build}</code></span></p>}
     {creating && <form className="ai-key-form" onSubmit={create}><input className="form-control form-control-sm" autoFocus maxLength={60} placeholder="Key name, e.g. Claude agent" aria-label="Key name" value={name} onChange={e => setName(e.target.value)} /><button className="btn btn-primary btn-sm" type="submit">Create</button><button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => { setCreating(false); setName(''); }}>Cancel</button></form>}

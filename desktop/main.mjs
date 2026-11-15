@@ -32,6 +32,16 @@ const clients = {
   google: { clientId: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_ID', 'googleClientId'), clientSecret: pick('LOCKBOX_GOOGLE_DESKTOP_CLIENT_SECRET', 'googleInstalledAppSecret') },
   microsoft: { clientId: pick('LOCKBOX_MS_DESKTOP_CLIENT_ID', 'microsoftClientId') },
 };
+// Owner-entered app registrations (Setup in Add mailbox) live in the OS vault and win over baked values,
+// so each person uses their own Google and Microsoft registrations, like a self-hosted server.
+const OWN_KEY = 'provider-setup';
+async function loadOwnClients() {
+  const own = JSON.parse((await keytar.getPassword('Lockbox Mailboxes', OWN_KEY)) || '{}');
+  if (own.google?.clientId) clients.google = { clientId: own.google.clientId, clientSecret: own.google.clientSecret };
+  if (own.microsoft?.clientId) clients.microsoft = { clientId: own.microsoft.clientId };
+  return own;
+}
+const setupView = () => ({ runtime: 'desktop', google: { clientId: clients.google.clientId || '', hasSecret: !!clients.google.clientSecret }, microsoft: { clientId: clients.microsoft.clientId || '' } });
 // The screens are bundled into the installer (renderer-dist) and served from app://lockbox.
 // LOCKBOX_DEV_URL only exists for local development against a running dev server.
 const APP_URL = process.env.LOCKBOX_DEV_URL || 'app://lockbox/index.html';
@@ -65,8 +75,9 @@ function startLoopback(expectedState) {
 }
 
 async function connect(providerId) {
+  await loadOwnClients();
   const client = clients[providerId];
-  if (!client?.clientId) throw new Error(`No desktop OAuth client configured for ${providerId}`);
+  if (!client?.clientId) throw new Error(`${providerId === 'google' ? 'Gmail' : 'Outlook'} isn't set up yet. Open Setup in Add mailbox and add your own app keys.`);
   const { verifier, challenge, state } = await createPkce();
   const { redirectUri, code: codePromise } = await startLoopback(state);
   await shell.openExternal(buildAuthUrl(providerId, { clientId: client.clientId, redirectUri, challenge, state }));
@@ -95,6 +106,16 @@ async function withToken(id, fn) {
 const guard = e => { if (new URL(e.senderFrame.url).origin !== appOrigin) throw new Error('forbidden'); };
 const on = (channel, fn) => ipcMain.handle(channel, (e, ...args) => { guard(e); return fn(...args); });
 on('mailbox:list', () => readIndex());
+on('setup:providers', async () => { await loadOwnClients(); return { google: clients.google.clientId ? 'desktop' : 'none', microsoft: clients.microsoft.clientId ? 'desktop' : 'none', isAdmin: true }; });
+on('setup:get', async () => { await loadOwnClients(); return setupView(); });
+on('setup:put', async body => {
+  const own = await loadOwnClients();
+  const clean = v => String(v || '').trim().slice(0, 300);
+  if (body?.google) { const id = clean(body.google.clientId); const sec = clean(body.google.clientSecret) || own.google?.clientSecret || ''; own.google = id ? { clientId: id, clientSecret: sec } : undefined; if (!id) clients.google = {}; }
+  if (body?.microsoft) { const id = clean(body.microsoft.clientId); own.microsoft = id ? { clientId: id } : undefined; if (!id) clients.microsoft = {}; }
+  await keytar.setPassword('Lockbox Mailboxes', OWN_KEY, JSON.stringify(own));
+  await loadOwnClients(); return setupView();
+});
 on('mailbox:connect', provider => connect(provider));
 on('mailbox:sync', id => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.inbox(s) : mail[box.provider].inbox(t)));
 on('mailbox:attachment', (id, msgId, attId) => withToken(id, (t, box, s) => box.provider === 'imap' ? imap.attachment(s, msgId, attId) : mail[box.provider].attachment(t, msgId, attId)));

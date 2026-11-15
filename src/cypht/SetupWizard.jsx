@@ -7,7 +7,51 @@ function Copy({ value }) {
   return <div className="setup-copy"><code>{value}</code><button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(value); setDone(true); }}><Icon name={done ? 'check2' : 'clipboard'} /> {done ? 'Copied' : 'Copy'}</button></div>;
 }
 
+// Desktop: the owner's own Google "Desktop app" and Microsoft "Mobile and desktop" registrations, kept in the OS vault.
+function DesktopSetup({ bridge, onDone }) {
+  const [view, setView] = useState(null);
+  const [form, setForm] = useState({ gId: '', gSecret: '', mId: '' });
+  const [msg, setMsg] = useState('');
+  useEffect(() => { bridge.getSetup().then(v => { setView(v); setForm({ gId: v.google.clientId, gSecret: '', mId: v.microsoft.clientId }); }).catch(e => setMsg(e.message)); }, []);
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const save = async body => { try { setView(await bridge.saveSetup(body)); setForm(f => ({ ...f, gSecret: '' })); setMsg('Saved.'); } catch (e) { setMsg(e.message); } };
+  if (!view) return <div className="setup-wizard"><p>{msg || 'Loading setup…'}</p></div>;
+  return <div className="setup-wizard">
+    <p className="small">Add your own Google and Microsoft app keys so you can click <strong>Connect Gmail</strong> and <strong>Connect Outlook</strong>. They stay encrypted on this computer.</p>
+    {msg && <p className="small">{msg}</p>}
+    <form onSubmit={e => { e.preventDefault(); save({ google: { clientId: form.gId, clientSecret: form.gSecret } }); }}>
+      <h3 className="mailbox-list-title">Gmail</h3>
+      <ol className="small setup-howto">
+        <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud → Credentials</a> and turn on the Gmail API.</li>
+        <li>Create an <strong>OAuth client ID</strong> of type <strong>Desktop app</strong> (no redirect address needed).</li>
+      </ol>
+      <label className="form-label">Client ID</label>
+      <input className="form-control" value={form.gId} onChange={set('gId')} required />
+      <label className="form-label mt-2">Client secret</label>
+      <input className="form-control" type="password" autoComplete="off" placeholder={view.google.hasSecret ? 'Saved. Leave blank to keep it.' : ''} value={form.gSecret} onChange={set('gSecret')} required={!view.google.hasSecret} />
+      <div className="dialog-actions"><button className="btn btn-primary">Save Gmail keys</button></div>
+    </form>
+    <form onSubmit={e => { e.preventDefault(); save({ microsoft: { clientId: form.mId } }); }}>
+      <h3 className="mailbox-list-title">Outlook</h3>
+      <ol className="small setup-howto">
+        <li>In <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noreferrer">Microsoft Entra → App registrations</a>, create an app for any organization and personal accounts.</li>
+        <li>Add platform <strong>Mobile and desktop applications</strong> with redirect <code>http://localhost</code>, and add the Mail.ReadWrite, Mail.Send, User.Read and offline_access permissions.</li>
+        <li>Copy its <strong>Application (client) ID</strong>. No secret is needed.</li>
+      </ol>
+      <label className="form-label">Application (client) ID</label>
+      <input className="form-control" value={form.mId} onChange={set('mId')} required />
+      <div className="dialog-actions"><button className="btn btn-primary">Save Outlook key</button></div>
+    </form>
+    <div className="dialog-actions"><button type="button" className="btn btn-primary" onClick={onDone}>Done</button></div>
+  </div>;
+}
+
 export default function SetupWizard({ bridge, onDone }) {
+  if (bridge?.runtime === 'desktop') return <DesktopSetup bridge={bridge} onDone={onDone} />;
+  return <ServerSetup bridge={bridge} onDone={onDone} />;
+}
+
+function ServerSetup({ bridge, onDone }) {
   const [view, setView] = useState(null);
   const [form, setForm] = useState({ publicUrl: '', gId: '', gSecret: '', dId: '', mId: '', mSecret: '' });
   const [step, setStep] = useState(0);

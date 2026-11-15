@@ -30,7 +30,7 @@ export default function MailboxDialog({ mailboxes, onConnect, onReconnect, onDis
         <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => { navigator.clipboard?.writeText(device.userCode); setCopied(true); }}><Icon name={copied ? 'check2' : 'clipboard'} /> {copied ? 'Copied' : 'Copy'}</button></div>
       <div className="dialog-actions"><button type="button" className="btn btn-outline-secondary" onClick={() => { cancelled.current = true; setDevice(null); }}>Cancel</button><a className="btn btn-primary" href={device.verificationUri} target="_blank" rel="noreferrer">Open Microsoft sign-in</a></div>
     </div>}
-    {live && info && info.google === 'none' && <div className="mailbox-demo-badge"><Icon name="exclamation-triangle" /> <span>Gmail isn't set up on this server yet.{info.isAdmin ? ' Open Setup to finish it.' : ' Ask your Lockbox admin to finish Setup.'}</span></div>}
+    {live && info && info.google === 'none' && <div className="mailbox-demo-badge"><Icon name="exclamation-triangle" /> <span>Gmail isn't set up {bridge.runtime === 'desktop' ? 'in this app' : 'on this server'} yet.{info.isAdmin ? ' Open Setup to add your own keys.' : ' Ask your Lockbox admin to finish Setup.'}</span></div>}
     {!device && (!provider ? <div className="mailbox-providers">
       {Object.entries(MAILBOX_PROVIDERS).map(([id, p]) => <button key={id} type="button" className="mailbox-provider" onClick={() => start(id)}>
         <span className={`mailbox-provider-icon is-${id}`}><Icon name={p.icon} /></span>

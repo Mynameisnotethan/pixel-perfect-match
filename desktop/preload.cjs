@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('lockboxMailboxes', {
   runtime: 'desktop',
   list: () => ipcRenderer.invoke('mailbox:list'),
+  providers: () => ipcRenderer.invoke('setup:providers'),
+  getSetup: () => ipcRenderer.invoke('setup:get'),
+  saveSetup: body => ipcRenderer.invoke('setup:put', body),
   connect: provider => ipcRenderer.invoke('mailbox:connect', provider),
   sync: id => ipcRenderer.invoke('mailbox:sync', id),
   attachment: (id, msgId, attId) => ipcRenderer.invoke('mailbox:attachment', id, msgId, attId),

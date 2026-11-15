@@ -373,3 +373,8 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .ai-key-copy code { word-break: break-all; }
 @media (max-width: 560px) { .aw-progress li em { display: none; } }
 .ai-key-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* AI Access: full-width cards, actions pinned right of each card heading */
+.ai-page { max-width: 1100px; width: 100%; }
+.ai-card-head { align-items: center; margin-bottom: 12px; }
+.ai-card-head h2 { margin: 0; }
+.ai-card-head > .ai-key-head-actions { flex: 0 0 auto; margin-left: auto; justify-content: flex-end; }

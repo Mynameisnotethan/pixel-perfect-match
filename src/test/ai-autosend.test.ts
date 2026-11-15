@@ -14,12 +14,12 @@ const trusted = { user: "u", keyId: "k", perms: { mailboxes: send, autoSend: [BO
 const normal = { user: "u", keyId: "k", perms: { mailboxes: send } };
 
 describe("send without per-email approval", () => {
-  it("all-mailboxes opt-in covers current and future mailboxes", () => {
+  it("Send emails covers current and future mailboxes", () => {
     const p = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: ['*'] };
     expect(canAutoSend(p, BOX)).toBe(true);
     expect(canAutoSend(p, 'google:new@gmail.com')).toBe(true);
     expect(canAutoSend({ ...p, send: false }, BOX)).toBe(false);
-    expect(canAutoSend({ ...p, autoSend: [] }, BOX)).toBe(false);
+    expect(canAutoSend({ ...p, autoSend: [] }, BOX)).toBe(true);
   });
   it("switching to selected mailboxes cannot authorize unlisted mailboxes", () => {
     const p = normalizePerms({ mailboxes: send, autoSend: ['*'] });
@@ -27,13 +27,13 @@ describe("send without per-email approval", () => {
     expect(canAutoSend(p, BOX)).toBe(true);
     expect(canAutoSend(p, 'google:other@gmail.com')).toBe(false);
   });
-  it("does not expand existing mailbox-specific consent to all mailboxes", () => {
+  it("Send emails alone applies to all mailboxes when all access is enabled", () => {
     const p = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: [BOX] };
     expect(canAutoSend(p, BOX)).toBe(true);
-    expect(canAutoSend(p, 'google:new@gmail.com')).toBe(false);
+    expect(canAutoSend(p, 'google:new@gmail.com')).toBe(true);
   });
-  it("is off unless the mailbox is listed, and needs Send email", () => {
-    expect(normalizePerms({ mailboxes: send }).autoSend).toEqual([]);
+  it("is off by default and requires Send emails", () => {
+    expect(normalizePerms({ mailboxes: send }).autoSend).toEqual([BOX]);
     expect(normalizePerms(undefined).autoSend).toEqual([]);
     expect(canAutoSend({ mailboxes: { [BOX]: { read: true, drafts: true } }, autoSend: [BOX] }, BOX)).toBe(false);
     expect(canAutoSend(trusted.perms, BOX)).toBe(true);
@@ -54,11 +54,11 @@ describe("send without per-email approval", () => {
     await svc.update(trusted, { draft_id: d.draft_id, body: "changed" });
     await expect(svc.send(trusted, { draft_id: d.draft_id, version: d.version })).rejects.toThrow(/version/);
   });
-  it("keeps the approval flow when the setting is off", async () => {
+  it("Send emails sends without a separate autoSend setting", async () => {
     const sent = []; const svc = service(sent);
     const d = await svc.create(normal, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
-    expect((await svc.send(normal, { draft_id: d.draft_id, version: d.version })).status).toBe("approval_required");
-    expect(sent).toEqual([]);
+    expect((await svc.send(normal, { draft_id: d.draft_id, version: d.version })).status).toBe("sent");
+    expect(sent).toEqual(["p1"]);
   });
   it("schedule_send queues the exact version at once and sends it when due", async () => {
     const sent = []; const svc = service(sent);
@@ -69,12 +69,12 @@ describe("send without per-email approval", () => {
     await svc.runDue(Date.now()); expect(sent).toEqual([]);
     await svc.runDue(Date.parse(at) + 1000); expect(sent).toEqual(["p1"]);
   });
-  it("without the setting, scheduling waits for approval", async () => {
+  it("Send emails queues without a separate autoSend setting", async () => {
     const sent = []; const svc = service(sent);
     const d = await svc.create(normal, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
     const at = new Date(Date.now() + 120_000).toISOString();
-    expect((await svc.schedule(normal, { draft_id: d.draft_id, version: d.version, send_at: at })).schedule_status).toBe("awaiting_approval");
-    await svc.runDue(Date.parse(at) + 1000); expect(sent).toEqual([]);
+    expect((await svc.schedule(normal, { draft_id: d.draft_id, version: d.version, send_at: at })).schedule_status).toBe("queued");
+    await svc.runDue(Date.parse(at) + 1000); expect(sent).toEqual(["p1"]);
   });
 });
 
@@ -85,7 +85,7 @@ describe("queued sends stay under the owner's control", () => {
     const sent = []; let perms = trusted.perms; const svc = service(sent, async () => perms);
     const d = await svc.create(trusted, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
     const when = at(); await svc.schedule(trusted, { draft_id: d.draft_id, version: d.version, send_at: when });
-    perms = { mailboxes: send }; // owner turned off no-approval sending
+    perms = { mailboxes: { [BOX]: { read: true, drafts: true, send: false } } }; // owner revoked Send emails
     await svc.runDue(Date.parse(when) + 1000);
     expect(sent).toEqual([]);
     expect((await svc.ownerList("u"))[0].schedule_status).toBe("needs_approval");
@@ -107,10 +107,10 @@ describe("queued sends stay under the owner's control", () => {
     msgs = aiDraftsToMessages(msgs, await svc.ownerList("u"));
     expect(msgs[0].folder).toBe("drafts");
   });
-  it("an old approval request is not released by turning the setting on", async () => {
+  it("creating and editing without an explicit send never delivers", async () => {
     const sent = []; const svc = service(sent);
     const d = await svc.create(normal, { mailbox: BOX, to: "me@o.com", subject: "s", body: "b" });
-    const when = at(); await svc.schedule(normal, { draft_id: d.draft_id, version: d.version, send_at: when });
-    await svc.runDue(Date.parse(when) + 1000); expect(sent).toEqual([]);
+    await svc.update(normal, { draft_id: d.draft_id, body: "updated" });
+    await svc.runDue(Date.now() + 3600_000); expect(sent).toEqual([]);
   });
 });

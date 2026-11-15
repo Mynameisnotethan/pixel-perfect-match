@@ -16,7 +16,7 @@ import { checkAccess, scheduleTest } from "../../scripts/check-mcp-tools.mjs";
 const BOX = "microsoft:ethenry1982@outlook.com";
 const ME = "ethenry1982@outlook.com";
 const TRUSTED = { mailboxes: { [BOX]: { read: true, drafts: true, send: true } }, autoSend: [BOX] };
-const ALL_TRUSTED = { mailboxes: 'all', read: true, drafts: true, send: true, autoSend: ['*'] };
+const ALL_TRUSTED = { mailboxes: 'all', read: true, drafts: true, send: true };
 afterEach(cleanup);
 const sha = s => createHash("sha256").update(String(s)).digest("hex");
 
@@ -67,19 +67,16 @@ describe("direct send over the live MCP path", () => {
       s.close();
     });
   }
-  it("a key without the setting still needs approval and says why", async () => {
+  it("a draft-only key cannot send or schedule", async () => {
     const s = await setup();
-    const k = await s.keys.create("owner", "Other agent");
-    await s.keys.setPerms("owner", k.id, { mailboxes: { [BOX]: { read: true, drafts: true, send: true } } });
-    const d = (await s.call(k.key, "create_draft", { mailbox: BOX, to: ME, subject: "s", body: "b" })).structuredContent;
-    const r = (await s.call(k.key, "send_draft", { draft_id: d.draft_id, version: 1 })).structuredContent;
-    expect(r.status).toBe("approval_required"); expect(r.approval_url).toMatch(/approve/);
-    expect(r.approval_reason).toBe("direct_send_off_for_key");
-    expect(r.approval_reason_text).toContain(`"Other agent" (…${k.last4})`);
-    const q = (await s.call(k.key, "schedule_send", { draft_id: d.draft_id, version: 1, send_at: new Date(Date.now() + 3600e3).toISOString() })).structuredContent;
-    expect(q.schedule_status).toBe("awaiting_approval"); expect(q.approval_reason).toBe("direct_send_off_for_key");
-    expect(s.sent).toEqual([]);
-    s.close();
+    try {
+      const k = await s.keys.create("owner", "Other agent");
+      await s.keys.setPerms("owner", k.id, { mailboxes: { [BOX]: { read: true, drafts: true, send: false } } });
+      const d = (await s.call(k.key, "create_draft", { mailbox: BOX, to: ME, subject: "s", body: "b" })).structuredContent;
+      expect((await s.call(k.key, "send_draft", { draft_id: d.draft_id, version: 1 })).isError).toBe(true);
+      expect((await s.call(k.key, "schedule_send", { draft_id: d.draft_id, version: 1, send_at: new Date(Date.now() + 3600e3).toISOString() })).isError).toBe(true);
+      expect(s.sent).toEqual([]);
+    } finally { s.close(); }
   });
   it("get_access names the key and its per-mailbox rights without any secret", async () => {
     const s = await setup();
@@ -123,14 +120,14 @@ describe("live check script", () => {
 });
 
 describe("the setting sticks", () => {
-  it("saves one all-mailboxes direct-send opt-in even before mailboxes load", async () => {
+  it("Send emails saves direct-send rights even before mailboxes load", async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onSave = vi.fn(async () => {});
-    render(React.createElement(KeyEditor, { k: { id: 'k', name: 'ChatGPT', perms: { ...ALL_TRUSTED, autoSend: [] } }, mailboxes: [], onSave, onCancel: () => {} }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Allow sending without per-email approval', exact: true }));
+    render(React.createElement(KeyEditor, { k: { id: 'k', name: 'ChatGPT', perms: { ...ALL_TRUSTED, send: false } }, mailboxes: [], onSave, onCancel: () => {} }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Send emails', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(onSave.mock.calls[0][0]).toEqual(ALL_TRUSTED);
+    expect(onSave.mock.calls[0][0]).toEqual({ ...ALL_TRUSTED, autoSend: ['*'] });
     expect(canAutoSend(onSave.mock.calls[0][0], 'google:added-later@gmail.com')).toBe(true);
   });
   it("mailbox ids match regardless of letter case", () => {

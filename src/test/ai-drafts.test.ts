@@ -89,8 +89,8 @@ describe("AI drafts", () => {
   it("needs owner approval of the exact version, and edits cancel it", async () => {
     const { svc, p, who } = setup();
     const d = await svc.create(who, { mailbox: "google:me@x.com", to: "a@b.com", subject: "S", body: "v1" });
-    const first = await svc.send(who, { draft_id: d.draft_id, approved: true });
-    expect(first.status).toBe("approval_required");
+    const first = await svc.requestApproval(who, { draft_id: d.draft_id });
+    expect(first.approved_for_sending).toBe(false);
     expect(first.approval_url).toContain(d.draft_id);
     expect(p.state.sent).toEqual([]);
     const view = await svc.ownerView("owner", d.draft_id);
@@ -98,7 +98,7 @@ describe("AI drafts", () => {
     const edited = await svc.update(who, { draft_id: d.draft_id, body: "v2" });
     expect(edited.version).toBe(2);
     expect(edited.approved_for_sending).toBe(false);
-    expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("approval_required");
+    await expect(svc.send(who, { draft_id: d.draft_id })).rejects.toMatchObject({ code: "version_required" });
     await expect(svc.approve("owner", d.draft_id, view.hash)).rejects.toThrow(/changed/);
     await expect(svc.approve("intruder", d.draft_id, (await svc.ownerView("owner", d.draft_id)).hash)).rejects.toThrow(/not found/i);
   });
@@ -138,9 +138,9 @@ describe("AI drafts", () => {
     let answer = false;
     const { svc, p, who } = setup({ confirm: async view => { expect(view.to).toBe("a@b.com"); return answer; } });
     const d = await svc.create(who, { mailbox: "google:me@x.com", to: "a@b.com", body: "go" });
-    expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("approval_required");
+    await expect(svc.send(who, { draft_id: d.draft_id })).rejects.toMatchObject({ code: "version_required" });
     answer = true;
-    expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("sent");
+    expect((await svc.send(who, { draft_id: d.draft_id, version: d.version })).status).toBe("sent");
     expect(p.state.sent).toHaveLength(1);
   });
 });
@@ -174,7 +174,7 @@ describe("Key permissions over MCP", () => {
     expect(send.isError).toBe(true);
     expect(send.content[0].text).toMatch(/not allowed/);
     await s.keys.setPerms("owner", k.id, { read: true, drafts: true, send: true });
-    expect((await s.call(k.key, "send_draft", { draft_id: made.structuredContent.draft_id })).structuredContent.status).toBe("approval_required");
+    expect((await s.call(k.key, "send_draft", { draft_id: made.structuredContent.draft_id, version: made.structuredContent.version })).structuredContent.status).toBe("sent");
     expect((await s.call(k.key, "send_draft", { draft_id: made.structuredContent.draft_id, approved: true })).isError).toBe(true);
     expect(await s.keys.setPerms("intruder", k.id, { send: true })).toBeNull();
     s.close();

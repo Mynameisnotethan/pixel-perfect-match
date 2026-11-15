@@ -62,7 +62,7 @@ describe("AI draft workflow", () => {
     const d = await svc.create(who, REQUEST);
     await svc.approve("owner", d.draft_id, (await svc.ownerView("owner", d.draft_id)).hash);
     await svc.update(who, { draft_id: d.draft_id, body: "changed" });
-    expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("approval_required");
+    await expect(svc.send(who, { draft_id: d.draft_id })).rejects.toMatchObject({ code: "version_required" });
     await svc.approve("owner", d.draft_id, (await svc.ownerView("owner", d.draft_id)).hash);
     expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("sent");
     expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("sent");
@@ -73,9 +73,9 @@ describe("AI draft workflow", () => {
     const { svc, p, who } = setup();
     const d = await svc.create(who, REQUEST);
     const at = new Date(Date.now() + 3600_000).toISOString();
-    const s = await svc.schedule(who, { draft_id: d.draft_id, send_at: at });
-    expect(s).toMatchObject({ version: 2, schedule_status: "awaiting_approval", send_at: at });
-    expect(s.approval_url).toContain(d.draft_id);
+    const s = await svc.schedule(who, { draft_id: d.draft_id, version: (await svc.get(who, { draft_id: d.draft_id })).version, send_at: at });
+    expect(s).toMatchObject({ version: 2, schedule_status: "queued", send_at: at });
+    expect(s.approval_url).toBeUndefined();
     expect((await svc.send(who, { draft_id: d.draft_id })).status).toBe("scheduled");
     await svc.approve("owner", d.draft_id, (await svc.ownerView("owner", d.draft_id)).hash);
     expect(await svc.runDue(Date.now())).toEqual([]);
@@ -90,10 +90,10 @@ describe("AI draft workflow", () => {
   it("rescheduling or cancelling clears the approval", async () => {
     const { svc, p, who } = setup();
     const d = await svc.create(who, REQUEST);
-    await svc.schedule(who, { draft_id: d.draft_id, send_at: new Date(Date.now() + 3600_000).toISOString() });
+    await svc.schedule(who, { draft_id: d.draft_id, version: (await svc.get(who, { draft_id: d.draft_id })).version, send_at: new Date(Date.now() + 3600_000).toISOString() });
     await svc.approve("owner", d.draft_id, (await svc.ownerView("owner", d.draft_id)).hash);
-    const moved = await svc.schedule(who, { draft_id: d.draft_id, send_at: new Date(Date.now() + 7200_000).toISOString() });
-    expect(moved.approved_for_sending).toBe(false);
+    const moved = await svc.schedule(who, { draft_id: d.draft_id, version: (await svc.get(who, { draft_id: d.draft_id })).version, send_at: new Date(Date.now() + 7200_000).toISOString() });
+    expect(moved.approved_for_sending).toBe(true);
     const c = await svc.cancelSchedule(who, { draft_id: d.draft_id });
     expect(c).toMatchObject({ send_at: null, approved_for_sending: false });
     await svc.runDue(Date.now() + 10 * 3600_000);

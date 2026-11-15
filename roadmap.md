@@ -118,3 +118,7 @@
 # All-mailboxes direct sending
 
 - [x] Replace individual direct-send checkboxes in All mailboxes mode with one explicit opt-in for current and future mailboxes; verify server/desktop permissions and editor persistence (195 tests passed; browser save/reopen passed; Hostinger requires redeploy).
+
+# Single sending permission
+
+- [x] Remove the separate approval-free toggle; Send emails alone authorizes exact-version sends/schedules; consent, revocation, editor and MCP paths verified (195 tests passed serially; browser save/reopen passed; Hostinger requires redeploy).

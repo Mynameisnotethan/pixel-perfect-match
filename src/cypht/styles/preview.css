@@ -378,3 +378,7 @@ button,input,select,textarea{font:inherit}button{touch-action:manipulation}butto
 .ai-card-head { align-items: center; margin-bottom: 12px; }
 .ai-card-head h2 { margin: 0; }
 .ai-card-head > .ai-key-head-actions { flex: 0 0 auto; margin-left: auto; justify-content: flex-end; }
+#ai-labels { position: relative; }
+#ai-labels > h2 { margin: 0 0 12px; min-height: 31px; display: flex; align-items: center; }
+#ai-labels .label-manager { max-width: none; }
+#ai-labels .label-manager > button:first-child { position: absolute; top: 16px; right: 18px; margin: 0 !important; width: auto; }
